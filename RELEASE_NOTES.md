@@ -1,4 +1,4 @@
-Raumcast vereinfacht die Bildschirmübertragung an AirServer mit Raumsuche, Bereichsfiltern, Favoriten und eigenen Raumnamen.
+Raumcast ist für Nutzerinnen und Nutzer der **CWS Usingen** gedacht und vereinfacht die Bildschirmübertragung an die AirServer in den Unterrichtsräumen. Raumsuche, Bereichsfilter und Anzeigenamen sind auf die Geräte- und Raumbezeichnungen der CWS Usingen abgestimmt. Favoriten und eigene Raumnamen erleichtern die tägliche Nutzung.
 
 Die Pakete enthalten die Node.js-Laufzeit. Chrome oder Chromium muss bereits installiert sein. Den gesamten Programmordner entpacken und den passenden Starter öffnen:
 

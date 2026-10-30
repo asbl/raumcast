@@ -1,6 +1,10 @@
 # Raumcast
 
-Lokaler Prototyp zur Bildschirmübertragung an AirServer: Raum suchen, Enter drücken, Bildschirm im Systemdialog auswählen. Die Anwendung steuert eine eigene Chrome-/Chromium-Instanz und verwendet ausschließlich Desktop-Mirroring.
+Raumcast ist für Nutzerinnen und Nutzer der **CWS Usingen** gedacht. Das Tool vereinfacht die Bildschirmübertragung an die AirServer in den Unterrichtsräumen: Raum suchen, Enter drücken und den Bildschirm im Systemdialog auswählen.
+
+Raumsuche, Anzeigenamen und Bereichsfilter sind an die Geräte- und Raumbezeichnungen der CWS Usingen angepasst. Aus technischen Empfängernamen wie `CWSR208PCWB` wird beispielsweise „Raum A208“. Räume lassen sich nach A, E oder G filtern und als Favoriten speichern. Die Zuordnungen D/RD/RE → E, RA → A und RG → G sowie reine Raumnummern → A entsprechen dieser Anpassung. Für andere Schulen oder andere Namensschemata muss die Raumerkennung gegebenenfalls geändert werden.
+
+Die Anwendung ist ein lokaler Prototyp für Linux, Windows und macOS. Sie steuert eine eigene Chrome-/Chromium-Instanz und überträgt immer den gesamten ausgewählten Bildschirm. Der gewohnte Systemdialog zur Bildschirmauswahl bleibt erhalten.
 
 ## Downloads
 
