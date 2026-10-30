@@ -53,6 +53,7 @@ Nur eine echte Raumcast-Instanz gleichzeitig öffnen: Das eigene Browserprofil k
 - Alternativ einen Raum direkt anklicken.
 - Der Stern speichert einen Favoriten; der Stift ändert den Anzeigenamen. Ein leerer Anzeigename stellt den automatisch erkannten Namen wieder her.
 - `CWSR208PCWB` wird automatisch zu „Raum A208“, `CWSD32PCWB` zu „Raum E32“. Der Originalname bleibt sichtbar.
+- Die Empfängernamen dürfen auf `PCWB` oder `CWB` enden. Beispielsweise erscheint `CWSD12CWB` als „Raum E12“ im Bereich E und ist über `12`, `E12` oder den Originalnamen auffindbar.
 - Raum auswählen, dann den Bildschirm im gewohnten Systemdialog freigeben. Der Dialog wird nicht automatisch bestätigt.
 - Während der Übertragung kannst du das Fenster minimieren. „Übertragung beenden“ beendet die eigene Sitzung.
 - Geht die Erkennung eines eigenen Empfängers verloren, erscheint „Verbindung nicht bestätigt“. Das Ziel und der Stop-Knopf bleiben erhalten. Bei Wiedererkennung wird der Status erneut abgeglichen. Falls ein Stop fehlschlägt, kannst du ihn wiederholen oder Raumcast schließen.

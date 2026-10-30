@@ -51,6 +51,20 @@ test('Schulnamen werden lesbar, andere Namen bleiben erhalten', () => {
   assert.equal(roomLabel('CWSRG01PCWB'), 'Raum G01');
   assert.equal(roomLabel('Beamer Aula'), 'Beamer Aula');
 });
+test('CWS-Empfänger mit CWB und PCWB werden demselben Bereich zugeordnet', async t => {
+  for (const suffix of ['CWB', 'PCWB']) {
+    assert.equal(roomLabel(`CWSD12${suffix}`), 'Raum E12');
+    assert.equal(roomPrefix(`CWSD12${suffix}`), 'E');
+    assert.equal(roomLabel(`CWSRG01${suffix}`), 'Raum G01');
+    assert.equal(roomLabel(`CWSR208${suffix}`), 'Raum A208');
+  }
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([{ id:'d12', name:'CWSD12CWB' }]);
+  assert.equal(c.snapshot().rooms[0].prefix, 'E');
+  assert.equal(c.snapshot().rooms[0].code, 'E12');
+  await c.start('CWSD12CWB');
+  assert.deepEqual(p.commands.at(-1), { method:'Cast.startDesktopMirroring', params:{ sinkName:'CWSD12CWB' } });
+});
 test('startet nur Desktop-Mirroring und bestätigt Aktivität erst nach Ereignis', async t => {
   const { controller:c, transport:p } = await fixture(t);
   p.discover([room]);

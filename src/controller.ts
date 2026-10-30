@@ -7,7 +7,7 @@ export interface CastTransport {
   on(event: string, listener: (payload: any) => void): unknown;
 }
 function roomParts(name: string) {
-  const code = /^CWS(.+?)PCWB$/i.exec(name.trim())?.[1] ?? name.trim().replace(/^Raum\s+/i, '');
+  const code = /^CWS(.+?)(?:P?CWB)$/i.exec(name.trim())?.[1] ?? name.trim().replace(/^Raum\s+/i, '');
   const match = /^([a-z]*)\s*[- ]?(\d+[a-z]?)$/i.exec(code);
   if (!match) return null;
   const prefix = match[1].toUpperCase();
