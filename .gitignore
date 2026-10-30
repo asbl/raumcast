@@ -1,0 +1,10 @@
+node_modules/
+artifacts/
+*.log
+dist/
+build/
+release/
+.cache/
+start-raumcast.sh
+.DS_Store
+Thumbs.db
