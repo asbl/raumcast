@@ -30,6 +30,7 @@ export async function launch() {
   // Cast discovery stays enabled and no feature overrides replace user defaults.
   browser = await puppeteer.launch({
     executablePath: await findBrowser(), headless: false, pipe: true,
+    dumpio: process.env.RAUMCAST_DEBUG === '1',
     userDataDir: join(data, 'browser-profile'), defaultViewport: null,
     ignoreDefaultArgs: true, protocolTimeout: 120_000,
     args: ['--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check',

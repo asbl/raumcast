@@ -18,6 +18,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    env:
+      RAUMCAST_BROWSER: /usr/bin/google-chrome
+      RAUMCAST_DEBUG: '1'
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
@@ -27,6 +30,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm test
+      - run: /usr/bin/google-chrome --version
       - run: xvfb-run -a npm run test:ui
       - run: npm run package
       - run: xvfb-run -a npm run test:package -- --browser
