@@ -30,12 +30,12 @@ async function fixture(t: { after: (fn: () => Promise<void>) => void }) {
 }
 const room = { id:'208', name:'CWSR208PCWB' };
 test('Bereiche werden aus dem Originalnamen erkannt, einschließlich führender Nullen', () => {
-  for (const [name, expected] of [['CWSG01PCWB','G'], ['CWSE01PCWB','E'], ['CWSD32PCWB','E'], ['G01','G'], ['Raum e02','E'], ['Raum 208','A'], ['208','A'], ['CWS208PCWB','A'], ['Beamer Aula','']]) {
+  for (const [name, expected] of [['CWSG01PCWB','G'], ['CWSE01PCWB','E'], ['CWSD32PCWB','D'], ['G01','G'], ['Raum e02','E'], ['Raum 208','A'], ['208','A'], ['CWS208PCWB','A'], ['Beamer Aula','']]) {
     assert.equal(roomPrefix(name), expected);
   }
 });
-test('D, RD und RE werden E zugeordnet, RA wird A und RG wird G', () => {
-  for (const [prefix, area] of [['D','E'], ['RD','E'], ['RE','E'], ['E','E'], ['RA','A'], ['A','A'], ['RG','G'], ['G','G'], ['R','A']]) {
+test('D und RD bleiben D, RE wird E, RA wird A und RG wird G', () => {
+  for (const [prefix, area] of [['D','D'], ['RD','D'], ['RE','E'], ['E','E'], ['RA','A'], ['A','A'], ['RG','G'], ['G','G'], ['R','A']]) {
     for (const name of [`CWS${prefix}01PCWB`, `${prefix}01`, `Raum ${prefix.toLowerCase()}02`]) {
       assert.equal(roomPrefix(name), area, name);
     }
@@ -44,8 +44,8 @@ test('D, RD und RE werden E zugeordnet, RA wird A und RG wird G', () => {
 test('Schulnamen werden lesbar, andere Namen bleiben erhalten', () => {
   assert.equal(roomLabel(room.name), 'Raum A208');
   assert.equal(roomLabel('208'), 'Raum A208');
-  assert.equal(roomLabel('CWSD32PCWB'), 'Raum E32');
-  assert.equal(roomLabel('CWSRD01PCWB'), 'Raum E01');
+  assert.equal(roomLabel('CWSD32PCWB'), 'Raum D32');
+  assert.equal(roomLabel('CWSRD01PCWB'), 'Raum D01');
   assert.equal(roomLabel('CWSRE01PCWB'), 'Raum E01');
   assert.equal(roomLabel('CWSRA01PCWB'), 'Raum A01');
   assert.equal(roomLabel('CWSRG01PCWB'), 'Raum G01');
@@ -53,15 +53,17 @@ test('Schulnamen werden lesbar, andere Namen bleiben erhalten', () => {
 });
 test('CWS-Empfänger mit CWB und PCWB werden demselben Bereich zugeordnet', async t => {
   for (const suffix of ['CWB', 'PCWB']) {
-    assert.equal(roomLabel(`CWSD12${suffix}`), 'Raum E12');
-    assert.equal(roomPrefix(`CWSD12${suffix}`), 'E');
+    assert.equal(roomLabel(`CWSD12${suffix}`), 'Raum D12');
+    assert.equal(roomPrefix(`CWSD12${suffix}`), 'D');
+    assert.equal(roomLabel(`CWSRD12${suffix}`), 'Raum D12');
+    assert.equal(roomPrefix(`CWSRD12${suffix}`), 'D');
     assert.equal(roomLabel(`CWSRG01${suffix}`), 'Raum G01');
     assert.equal(roomLabel(`CWSR208${suffix}`), 'Raum A208');
   }
   const { controller:c, transport:p } = await fixture(t);
   p.discover([{ id:'d12', name:'CWSD12CWB' }]);
-  assert.equal(c.snapshot().rooms[0].prefix, 'E');
-  assert.equal(c.snapshot().rooms[0].code, 'E12');
+  assert.equal(c.snapshot().rooms[0].prefix, 'D');
+  assert.equal(c.snapshot().rooms[0].code, 'D12');
   await c.start('CWSD12CWB');
   assert.deepEqual(p.commands.at(-1), { method:'Cast.startDesktopMirroring', params:{ sinkName:'CWSD12CWB' } });
 });

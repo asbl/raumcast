@@ -11,7 +11,7 @@ Die Pakete enthalten die Node.js-Laufzeit. Chrome oder Chromium muss bereits ins
 
 Die eigenen Starter sind nicht signiert oder notarisiert. macOS und Windows können daher eine Bestätigung für heruntergeladene Programme verlangen. macOS benötigt gegebenenfalls die Berechtigung zur Bildschirmaufnahme für Chrome/Chromium.
 
-Bereichszuordnung: 208 wird A208; RA wird A; D, RD und RE werden E; RG wird G. Der Systemdialog zur Bildschirmauswahl bleibt erhalten.
+Bereichszuordnung: 208 wird A208; RA wird A; D und RD werden D; RE wird E; RG wird G. Der Systemdialog zur Bildschirmauswahl bleibt erhalten.
 
 Die vier dokumentierten Auditbefunde sind behoben und durch Regressionstests abgesichert. Die echte Übertragung an AirServer und das Verhalten bei Netzwerkunterbrechungen müssen weiterhin im jeweiligen Schulnetz geprüft werden. Paket-/Laufzeittests auf anderen Plattformen sind kein Ersatz für diesen Test.
 

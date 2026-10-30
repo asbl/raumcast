@@ -2,7 +2,7 @@
 
 Raumcast ist für Nutzerinnen und Nutzer der **CWS Usingen** gedacht. Das Tool vereinfacht die Bildschirmübertragung an die AirServer in den Unterrichtsräumen: Raum suchen, Enter drücken und den Bildschirm im Systemdialog auswählen.
 
-Raumsuche, Anzeigenamen und Bereichsfilter sind an die Geräte- und Raumbezeichnungen der CWS Usingen angepasst. Aus technischen Empfängernamen wie `CWSR208PCWB` wird beispielsweise „Raum A208“. Räume lassen sich nach A, E oder G filtern und als Favoriten speichern. Die Zuordnungen D/RD/RE → E, RA → A und RG → G sowie reine Raumnummern → A entsprechen dieser Anpassung. Für andere Schulen oder andere Namensschemata muss die Raumerkennung gegebenenfalls geändert werden.
+Raumsuche, Anzeigenamen und Bereichsfilter sind an die Geräte- und Raumbezeichnungen der CWS Usingen angepasst. Aus technischen Empfängernamen wie `CWSR208PCWB` wird beispielsweise „Raum A208“. Räume lassen sich nach A, D, E oder G filtern und als Favoriten speichern. Die Zuordnungen D/RD → D, RE → E, RA → A und RG → G sowie reine Raumnummern → A entsprechen dieser Anpassung. Für andere Schulen oder andere Namensschemata muss die Raumerkennung gegebenenfalls geändert werden.
 
 Die Anwendung ist ein lokaler Prototyp für Linux, Windows und macOS. Sie steuert eine eigene Chrome-/Chromium-Instanz und überträgt immer den gesamten ausgewählten Bildschirm. Der gewohnte Systemdialog zur Bildschirmauswahl bleibt erhalten.
 
@@ -48,12 +48,12 @@ Nur eine echte Raumcast-Instanz gleichzeitig öffnen: Das eigene Browserprofil k
 
 - Raumnummer oder Gerätename eingeben; Pfeiltasten wählen einen Eintrag, Enter verbindet.
 - Unter „Bereich“ nach dem Raumkürzel filtern, etwa G für G01 oder E für E01. Die Kürzel stammen aus den Originalnamen und bleiben beim Umbenennen erhalten. Bereich, Textsuche und Favoriten sind kombinierbar; „Alle Bereiche“ setzt den Bereichsfilter zurück.
-- Bereichszuordnung: D, RD und RE erscheinen gemeinsam unter E, RA unter A und RG unter G. Bereits vorhandene E-, A- und G-Räume gehören zum jeweiligen selben Bereich.
+- Bereichszuordnung: D und RD erscheinen gemeinsam unter D, RE unter E, RA unter A und RG unter G. Bereits vorhandene E-, A- und G-Räume gehören zum jeweiligen selben Bereich.
 - Räume ohne Buchstabenkürzel gehören zu A: 208 wird als A208 angezeigt, ebenso die bisher als 208 dargestellten Empfänger mit technischem R-Präfix. Die Suche findet sowohl A208 als auch 208, auch bei einem eigenen Anzeigenamen.
 - Alternativ einen Raum direkt anklicken.
 - Der Stern speichert einen Favoriten; der Stift ändert den Anzeigenamen. Ein leerer Anzeigename stellt den automatisch erkannten Namen wieder her.
-- `CWSR208PCWB` wird automatisch zu „Raum A208“, `CWSD32PCWB` zu „Raum E32“. Der Originalname bleibt sichtbar.
-- Die Empfängernamen dürfen auf `PCWB` oder `CWB` enden. Beispielsweise erscheint `CWSD12CWB` als „Raum E12“ im Bereich E und ist über `12`, `E12` oder den Originalnamen auffindbar.
+- `CWSR208PCWB` wird automatisch zu „Raum A208“, `CWSD32PCWB` zu „Raum D32“. Der Originalname bleibt sichtbar.
+- Die Empfängernamen dürfen auf `PCWB` oder `CWB` enden. Beispielsweise erscheint `CWSD12CWB` als „Raum D12“ im Bereich D und ist über `12`, `D12` oder den Originalnamen auffindbar.
 - Raum auswählen, dann den Bildschirm im gewohnten Systemdialog freigeben. Der Dialog wird nicht automatisch bestätigt.
 - Während der Übertragung kannst du das Fenster minimieren. „Übertragung beenden“ beendet die eigene Sitzung.
 - Geht die Erkennung eines eigenen Empfängers verloren, erscheint „Verbindung nicht bestätigt“. Das Ziel und der Stop-Knopf bleiben erhalten. Bei Wiedererkennung wird der Status erneut abgeglichen. Falls ein Stop fehlschlägt, kannst du ihn wiederholen oder Raumcast schließen.

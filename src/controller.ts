@@ -11,7 +11,7 @@ function roomParts(name: string) {
   const match = /^([a-z]*)\s*[- ]?(\d+[a-z]?)$/i.exec(code);
   if (!match) return null;
   const prefix = match[1].toUpperCase();
-  const areas: Record<string, string> = { '': 'A', R: 'A', D: 'E', RD: 'E', RE: 'E', RA: 'A', RG: 'G' };
+  const areas: Record<string, string> = { '': 'A', R: 'A', D: 'D', RD: 'D', RE: 'E', RA: 'A', RG: 'G' };
   return { prefix: areas[prefix] ?? prefix, number: match[2].toUpperCase() };
 }
 export function roomLabel(name: string): string {
