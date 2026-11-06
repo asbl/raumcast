@@ -222,3 +222,104 @@ test('Fehlgeschlagener Stop bleibt unbestätigt und kann wiederholt werden', asy
   assert.equal(c.phase, 'uncertain'); assert.equal(c.owned, room.name); assert.equal(c.busy, false);
   p.fail = ''; await c.stop(); assert.equal(c.phase, 'idle');
 });
+
+test('nicht bildschirmfähiger Empfänger startet nicht und beendet keine laufende Übertragung', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  const receiver = { id:'onkyo', name:'Onkyo' };
+  p.discover([room, receiver]);
+  await c.start(room.name);
+  p.discover([{ ...room, session:'Desktop' }, receiver]);
+  const checked = p as FakeTransport & { assertDesktopMirroringSupported: (sink: Sink) => Promise<void> };
+  checked.assertDesktopMirroringSupported = async () => { throw new Error('Keine Bildschirmübertragung'); };
+  const before = p.commands.length;
+  await assert.rejects(c.start(receiver.name), /Keine Bildschirmübertragung/);
+  assert.equal(p.commands.length, before);
+  assert.equal(c.owned, room.name);
+  assert.equal(c.phase, 'active');
+  assert.equal(c.busy, false);
+  assert.match(c.issue, /Keine Bildschirmübertragung/);
+});
+
+test('Computerton verwendet den Audiomodus und stoppt die Aufnahme nach Sitzungsende', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  let checked = 0;
+  let released = 0;
+  Object.assign(p, {
+    async assertSystemAudioSupported(sink: Sink) { assert.equal(sink.id, room.id); checked++; },
+    releaseSystemAudio() { released++; },
+  });
+  p.discover([room]);
+  await c.start(room.name, 'audio');
+  assert.equal(checked, 1);
+  assert.equal(c.snapshot().mode, 'audio');
+  assert.deepEqual(p.commands.at(-1), { method:'Raumcast.startSystemAudio', params:{ sinkName:room.name, sinkId:room.id, requestId:1 } });
+  p.discover([{ ...room, session:'Audio' }]);
+  p.emit('Raumcast.audioState', {requestId:1, state:'active'});
+  assert.equal(c.phase, 'active');
+  p.discover([room]);
+  assert.equal(c.phase, 'active'); // Discovery does not describe media playback.
+  p.emit('Raumcast.audioState', {requestId:1, state:'ended'});
+  assert.equal(c.phase, 'idle');
+  assert.equal(released, 1);
+});
+
+test('Computerton ohne Audio-Anbindung oder mit fehlerhafter Aufnahme startet keinen Cast-Aufruf', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([room]);
+  await assert.rejects(c.start(room.name, 'audio'), /nicht verfügbar/);
+  Object.assign(p, { async assertSystemAudioSupported() { throw new Error('Audioausgabe fehlt'); } });
+  await assert.rejects(c.start(room.name, 'audio'), /Audioausgabe fehlt/);
+  assert.equal(p.commands.length, 0);
+  assert.equal(c.owned, null);
+  assert.equal(c.busy, false);
+});
+
+test('Audioaufnahme endet bei Discovery-Verlust und beim Schließen, Ziel bleibt beendbar', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  let released = 0;
+  let disposed = 0;
+  Object.assign(p, {
+    async assertSystemAudioSupported() {},
+    suspendSystemAudio() { released++; },
+    dispose() { disposed++; },
+  });
+  p.discover([room]); await c.start(room.name, 'audio');
+  p.discover([{ ...room, session:'Audio' }]);
+  p.emit('Raumcast.audioState', {requestId:1, state:'active'});
+  p.discover([]);
+  assert.equal(released, 1);
+  assert.equal(c.phase, 'uncertain');
+  assert.equal(c.owned, room.name);
+  await c.stop();
+  assert.equal(c.owned, null);
+  c.dispose();
+  assert.equal(disposed, 1);
+});
+
+for (const mode of ['desktop', 'audio'] as const) {
+  test(`Empfängerklick ohne Modus wählt automatisch ${mode}`, async t => {
+    const { controller:c, transport:p } = await fixture(t);
+    let checks = 0;
+    Object.assign(p, {
+      async selectMode(sink: Sink) { assert.equal(sink.id, room.id); return mode; },
+      async assertSystemAudioSupported() { checks++; },
+      async assertDesktopMirroringSupported() { checks++; },
+    });
+    p.discover([room]);
+    await c.start(room.name);
+    assert.equal(c.mode, mode);
+    assert.equal(checks, 1);
+    assert.equal(p.commands.at(-1)?.method, mode === 'audio' ? 'Raumcast.startSystemAudio' : 'Cast.startDesktopMirroring');
+  });
+}
+test('fehlgeschlagene automatische Erkennung beendet keine bestehende Sitzung', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([room, nextRoom]); await c.start(room.name);
+  p.discover([{ ...room, session:'Bildschirm' }, nextRoom]);
+  Object.assign(p, { async selectMode() { throw new Error('Modus nicht bestätigt'); } });
+  const count = p.commands.length;
+  await assert.rejects(c.start(nextRoom.name), /Modus nicht bestätigt/);
+  assert.equal(p.commands.length, count);
+  assert.equal(c.owned, room.name);
+  assert.equal(c.phase, 'active');
+});

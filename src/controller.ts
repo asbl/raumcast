@@ -3,6 +3,12 @@ import { PreferenceStore } from './storage.js';
 
 export type Sink = { id: string; name: string; session?: string };
 export interface CastTransport {
+  selectMode?(sink: Sink): Promise<'desktop' | 'audio'>;
+  assertSystemAudioSupported?(sink: Sink): Promise<void>;
+  releaseSystemAudio?(): void;
+  suspendSystemAudio?(): void;
+  dispose?(): void;
+  assertDesktopMirroringSupported?(sink: Sink): Promise<void>;
   send(method: string, params?: Record<string, unknown>): Promise<unknown>;
   on(event: string, listener: (payload: any) => void): unknown;
 }
@@ -24,8 +30,9 @@ export function roomPrefix(name: string): string {
 
 export class CastController extends EventEmitter {
   sinks: Sink[] = [];
-  phase: 'idle' | 'starting' | 'pending' | 'active' | 'uncertain' | 'stopping' = 'idle';
+  phase: 'idle' | 'starting' | 'pending' | 'buffering' | 'active' | 'uncertain' | 'stopping' = 'idle';
   owned: string | null = null;
+  mode: 'desktop' | 'audio' = 'desktop';
   busy = false;
   issue = '';
   private pendingTimer?: ReturnType<typeof setTimeout>;
@@ -41,6 +48,10 @@ export class CastController extends EventEmitter {
       if (!this.owned || this.phase === 'stopping') return;
       const matches = sinks.filter(s => s.name === this.owned);
       const sink = matches.length === 1 && matches[0].id === this.ownedId ? matches[0] : undefined;
+      if (this.mode === 'audio') {
+        if (!sink) { this.phase = 'uncertain'; this.transport.suspendSystemAudio?.(); }
+        return; // Receiver app discovery cannot confirm our audio media session.
+      }
       if (sink?.session) {
         const first = !this.observedActive;
         this.observedActive = true;
@@ -55,6 +66,18 @@ export class CastController extends EventEmitter {
           // Discovery loss or ambiguity is not confirmation that mirroring stopped.
           this.phase = 'uncertain';
           clearTimeout(this.pendingTimer);
+        }
+      }
+    });
+    transport.on('Raumcast.audioState', ({ requestId, state, message }: { requestId:number; state:string; message?:string }) => {
+      if (this.disposed || this.mode !== 'audio' || !this.owned || requestId !== this.operation || this.phase === 'stopping') return;
+      if (state === 'ended') this.clearOwned();
+      else if (state === 'error') { this.phase = 'uncertain'; this.issue = message || 'Audioübertragung fehlgeschlagen.'; this.transport.suspendSystemAudio?.(); }
+      else if (this.phase !== 'uncertain' && (state === 'active' || state === 'buffering')) {
+        this.phase = state === 'active' ? 'active' : this.observedActive ? 'buffering' : 'pending';
+        if (state === 'active') {
+          if (!this.observedActive) void store.update(this.owned, { lastUsed:Date.now() }).catch(error => { this.issue = error.message; });
+          this.observedActive = true; clearTimeout(this.pendingTimer);
         }
       }
     });
@@ -75,7 +98,7 @@ export class CastController extends EventEmitter {
         ambiguous: matches.length > 1, session: matches[0]?.session || '',
       };
     });
-    return { rooms, phase: this.phase, owned: this.owned, busy: this.busy, issue: this.issue };
+    return { rooms, phase: this.phase, owned: this.owned, busy: this.busy, issue: this.issue, mode: this.mode };
   }
   private async stopOwned() {
     if (!this.owned) return;
@@ -89,7 +112,7 @@ export class CastController extends EventEmitter {
     this.phase = 'stopping';
     clearTimeout(this.pendingTimer);
     try {
-      await this.transport.send('Cast.stopCasting', { sinkName: name });
+      await this.transport.send(this.mode === 'audio' ? 'Raumcast.stopSystemAudio' : 'Cast.stopCasting', { sinkName: name });
       if (operation === this.operation && !this.disposed) this.clearOwned();
     } catch (error) {
       if (operation === this.operation && !this.disposed) this.phase = 'uncertain';
@@ -97,6 +120,7 @@ export class CastController extends EventEmitter {
     }
   }
   private clearOwned() {
+    if (this.mode === 'audio') this.transport.releaseSystemAudio?.();
     ++this.operation; // Invalidate replies belonging to an ended request.
     this.owned = null;
     this.ownedId = null;
@@ -111,28 +135,42 @@ export class CastController extends EventEmitter {
     if (matches[0].session) throw new Error('Dieser Empfänger wird bereits verwendet.');
     return matches[0];
   }
-  async start(name: string) {
+  async start(name: string, mode: 'desktop' | 'audio' | 'auto' = 'auto') {
     if (this.disposed) throw new Error('Raumcast wurde beendet.');
+    if (mode !== 'desktop' && mode !== 'audio' && mode !== 'auto') throw new Error('Unbekannter Übertragungsmodus.');
     if (this.busy || this.phase === 'pending') throw new Error('Eine Verbindungsanfrage läuft bereits.');
     if (this.owned === name && this.phase === 'active') return;
     const target = this.requireTarget(name);
     this.busy = true;
     this.issue = '';
     try {
+      if (mode === 'auto') {
+        mode = this.transport.selectMode ? await this.transport.selectMode(target) : 'desktop';
+        if (this.disposed) return;
+        this.requireTarget(name, target.id);
+      }
+      const check = mode === 'audio' ? this.transport.assertSystemAudioSupported : this.transport.assertDesktopMirroringSupported;
+      if (mode === 'audio' && !check) throw new Error('Computerton ist mit dieser Anbindung nicht verfügbar.');
+      if (check) {
+        await check.call(this.transport, target);
+        if (this.disposed) return;
+        this.requireTarget(name, target.id);
+      }
       await this.stopOwned();
       if (this.disposed) return;
       // Stopping the old session may take time; discovery can change meanwhile.
       this.requireTarget(name, target.id);
       const operation = ++this.operation;
+      this.mode = mode;
       this.owned = name;
       this.ownedId = target.id;
       this.observedActive = false;
       this.phase = 'starting';
       try {
-        await this.transport.send('Cast.startDesktopMirroring', { sinkName: name });
+        await this.transport.send(mode === 'audio' ? 'Raumcast.startSystemAudio' : 'Cast.startDesktopMirroring', { sinkName: name, ...(mode === 'audio' ? { sinkId: target.id, requestId:operation } : {}) });
       } catch (error) {
         // A timeout can leave a real request behind. Preserve its target for Stop.
-        if (!this.disposed && operation === this.operation && this.phase === 'starting') this.phase = 'pending';
+        if (!this.disposed && operation === this.operation && (this.phase === 'starting' || this.mode === 'audio')) this.phase = this.mode === 'audio' ? 'uncertain' : 'pending';
         throw error;
       }
       if (!this.disposed && operation === this.operation && this.phase === 'starting') {
@@ -176,5 +214,5 @@ export class CastController extends EventEmitter {
     if (patch.favorite !== undefined && typeof patch.favorite !== 'boolean') throw new Error('Ungültiger Favorit.');
     await this.store.update(name, patch);
   }
-  dispose() { this.disposed = true; ++this.operation; clearTimeout(this.pendingTimer); }
+  dispose() { if (this.disposed) return; this.disposed = true; ++this.operation; clearTimeout(this.pendingTimer); this.transport.dispose?.(); }
 }

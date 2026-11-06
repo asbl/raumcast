@@ -17,6 +17,7 @@
       <button id="stop" class="stop" hidden>Übertragung beenden</button>
     </section>
     <div id="error" role="alert" hidden></div>
+    <p id="audio-note" class="muted" hidden>Überträgt den Ton deiner aktuellen Standardausgabe, auch Tidal im Browser und Benachrichtigungen. Lass Tidal dort spielen. Cast puffert den Ton; die Übertragung ist nicht garantiert verlustfrei. Beim Wechsel der Audioausgabe neu verbinden.</p>
     <label for="search">Wohin möchtest du übertragen?</label>
     <div class="search"><span aria-hidden="true">⌕</span><input id="search" type="search" placeholder="Raum suchen, z. B. 208" autocomplete="off" autofocus><kbd>Enter ↵</kbd></div>
     <div class="toolbar"><div role="group" aria-label="Raumfilter"><button id="all" class="selected" aria-pressed="true">Alle Räume</button><button id="favorites" aria-pressed="false">★ Favoriten</button></div><button id="refresh" title="Empfängersuche neu starten">↻ Suchen</button></div>
@@ -24,7 +25,7 @@
     <p id="count" class="muted" aria-live="polite"></p>
     <ul id="rooms" aria-label="Empfänger"></ul>
     <div id="empty" hidden><strong>Suche nach Räumen …</strong><p>Verbinde dich mit dem Schulnetz. AirServer muss eingeschaltet und Google Cast aktiviert sein.</p></div>
-    <footer>Immer den Bildschirm teilen. Die Bildschirmauswahl bestätigst du im Systemdialog.<br><span id="demo-note" hidden>Demomodus: Es wird kein Bildschirm übertragen.</span></footer>
+    <footer><span id="transfer-note">Die Bildschirmauswahl bestätigst du im Systemdialog.</span><br><span id="demo-note" hidden>Demomodus: Es werden weder Bild noch Ton übertragen.</span></footer>
   </main>
   <dialog id="rename-dialog"><form id="rename-form"><h2>Raum benennen</h2><p id="original-name" class="muted"></p><label for="alias">Anzeigename</label><input id="alias" maxlength="100" placeholder="Automatischen Namen verwenden"><div class="dialog-actions"><button type="button" id="cancel-rename">Abbrechen</button><button type="submit" class="primary">Speichern</button></div></form></dialog>
 </body>

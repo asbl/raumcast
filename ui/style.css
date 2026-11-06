@@ -33,3 +33,5 @@ dialog { border:1px solid var(--border); border-radius:14px; background:var(--ca
 [hidden] { display:none !important; }
 @media (prefers-color-scheme:dark) { :root { --bg:#172126; --card:#202e35; --text:#e7eef1; --muted:#a4b5c0; --border:#384952; --accent:#78ceba; --soft:#29473f; --error:#ffaaaa; } .brand,.primary { background:#236e5d; color:#fff; } }
 @media (max-width:450px) { main { padding:20px 14px; } kbd { display:none; } .badge { max-width:65px; } }
+
+#audio-note { line-height:1.6; margin-top:0; margin-bottom:18px; }

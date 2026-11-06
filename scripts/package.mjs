@@ -21,7 +21,7 @@ await mkdir(cache, { recursive:true });
 await mkdir(output, { recursive:true });
 await rm(common, { recursive:true, force:true });
 await mkdir(common, { recursive:true });
-for (const file of ['package.json', 'package-lock.json', 'README.md', 'AUDIT.md']) await cp(file, join(common, file));
+for (const file of ['package.json', 'package-lock.json', 'README.md', 'AUDIT.md', 'AUDIT-IMPLEMENTATION-2026-10-30.md', 'AUDIT-FIXES-2026-10-30.md']) await cp(file, join(common, file));
 for (const dir of ['dist', 'ui']) await cp(dir, join(common, dir), { recursive:true });
 await mkdir(join(common, 'docs'), { recursive:true });
 await cp('docs/screenshot.png', join(common, 'docs', 'screenshot.png'));
@@ -65,6 +65,10 @@ for (const { target, destination } of source) {
   await cp(join(nodeRoot, 'LICENSE'), join(app, 'runtime', 'NODE-LICENSE.txt'));
   if (windows) {
     await writeFile(join(app, 'Raumcast.cmd'), '@echo off\r\ncd /d "%~dp0"\r\n"%~dp0runtime\\node.exe" "%~dp0dist\\main.js" %*\r\nif errorlevel 1 pause\r\n');
+    execFileSync('makensis', ['-V2', `-DAPP_DIR=${app}`, 'scripts/windows-launcher.nsi'], { stdio:'inherit' });
+    const installer = 'raumcast-windows-x64-setup.exe';
+    execFileSync('makensis', ['-V2', `-DAPP_DIR=${app}`, `-DOUTPUT_FILE=${join(output, installer)}`, `-DVERSION=${pkg.version}`, 'scripts/windows-installer.nsi'], { stdio:'inherit' });
+    files.push(installer);
   } else {
     await chmod(join(app, 'runtime', 'node'), 0o755);
     const startName = target.startsWith('darwin-') ? 'Raumcast.command' : 'Raumcast.sh';

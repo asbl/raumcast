@@ -11,6 +11,8 @@ const errors: string[] = [];
 app.page.on('pageerror', error => errors.push(String(error)));
 try {
   const page = app.page;
+  page.setDefaultTimeout(30000);
+  await page.bringToFront();
   await page.waitForSelector('.room');
   assert.equal(await page.$$eval('.room', rows => rows.length), 7);
   await page.type('#search', '208');
@@ -36,6 +38,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#connection')?.textContent?.includes('bereit'));
   assert.equal(app.controller.phase, 'idle');
   await page.reload();
+  await page.bringToFront();
   await page.waitForSelector('.starred');
   await page.click('#favorites');
   await page.waitForFunction(() => document.querySelectorAll('.room').length === 1);
@@ -84,10 +87,33 @@ try {
   await page.click('#prefixes button[data-prefix="G"]');
   await page.$eval('#search', el => { (el as HTMLInputElement).value = ''; el.dispatchEvent(new Event('input')); });
   await page.waitForFunction(() => document.querySelectorAll('.room').length === 2);
+  // A normal receiver click chooses audio automatically, without a mode control.
+  transport.sinks.push({ id:'audio:onkyo', name:'Onkyo Receiver' });
+  transport.emit('Cast.sinksUpdated', { sinks: structuredClone(transport.sinks) });
+  await page.click('#prefixes button[data-prefix="*"]');
+  await page.type('#search', 'Onkyo');
+  await page.waitForFunction(() => document.querySelectorAll('.room').length === 1);
+  assert.equal(await page.$('#transfer-mode'), null);
+  await page.click('.room .connect');
+  await page.waitForFunction(() => document.querySelector('#instruction')?.textContent?.includes('Computerton wird übertragen'));
+  assert.equal(app.controller.mode, 'audio');
+  assert.equal(await page.$eval('#audio-note', el => !(el as HTMLElement).hidden), true);
+  await page.reload();
+  await page.bringToFront();
+  await page.waitForFunction(() => document.querySelector('#instruction')?.textContent?.includes('Computerton wird übertragen'));
+  assert.equal(app.controller.mode, 'audio');
+  await page.click('#stop');
+  await page.waitForFunction(() => document.querySelector('#connection')?.textContent?.includes('bereit'));
+  assert.equal(await page.$eval('#audio-note', el => (el as HTMLElement).hidden), true);
+  await page.click('#prefixes button[data-prefix="G"]');
+  await page.waitForFunction(() => document.querySelectorAll('.room').length === 2);
   await mkdir('artifacts', { recursive:true });
   await page.screenshot({ path:'artifacts/demo.png' });
   assert.deepEqual(errors, []);
-  console.log('UI-Test erfolgreich: Suche, Favorit, Alias, Enter, Start/Stopp, Neuladen, Bereichsfilter und stabile Raumauswahl.');
+  console.log('UI-Test erfolgreich: Suche, Favorit, Alias, Enter, Start/Stopp, Neuladen, Bereichsfilter und stabile Raumauswahl sowie Computerton-Modus.');
+} catch(error) {
+  console.log('UI diagnostic', errors, app.controller.snapshot(), await app.page.evaluate(() => document.body.innerText));
+  throw error;
 } finally {
   await app.shutdown();
   await rm(temporary, { recursive:true, force:true });

@@ -15,6 +15,7 @@ export function dataDirectory(): string {
 export class PreferenceStore {
   value: Preferences = Object.create(null);
   private writes: Promise<void> = Promise.resolve();
+  private writeError?: unknown;
   constructor(readonly filename: string) {}
   async load() {
     try {
@@ -32,17 +33,19 @@ export class PreferenceStore {
     }
   }
   async update(name: string, patch: Partial<RoomPreference>) {
-    const current = this.value[name] ?? { alias: '', favorite: false, lastUsed: 0 };
-    this.value[name] = { ...current, ...patch };
-    const serialized = JSON.stringify(this.value, null, 2) + '\n';
     const task = this.writes.then(async () => {
+      const current = this.value[name] ?? { alias:'', favorite:false, lastUsed:0 };
+      const next = Object.assign(Object.create(null), this.value, { [name]:{ ...current, ...patch } }) as Preferences;
+      const serialized = JSON.stringify(next, null, 2) + '\n';
       await mkdir(dirname(this.filename), { recursive: true, mode: 0o700 });
       const temporary = this.filename + '.tmp';
       await writeFile(temporary, serialized, { mode: 0o600 });
       await rename(temporary, this.filename);
+      this.value = next;
+      this.writeError = undefined;
     });
-    this.writes = task.catch(() => {});
+    this.writes = task.catch(error => { this.writeError = error; });
     await task;
   }
-  async flush() { await this.writes; }
+  async flush() { await this.writes; if (this.writeError) throw this.writeError; }
 }

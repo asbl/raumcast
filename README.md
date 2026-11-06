@@ -4,18 +4,21 @@ Raumcast ist für Nutzerinnen und Nutzer der **CWS Usingen** gedacht. Das Tool v
 
 Raumsuche, Anzeigenamen und Bereichsfilter sind an die Geräte- und Raumbezeichnungen der CWS Usingen angepasst. Aus technischen Empfängernamen wie `CWSR208PCWB` wird beispielsweise „Raum A208“. Räume lassen sich nach A, D, E oder G filtern und als Favoriten speichern. Die Zuordnungen D/RD → D, RE → E, RA → A und RG → G sowie reine Raumnummern → A entsprechen dieser Anpassung. Für andere Schulen oder andere Namensschemata muss die Raumerkennung gegebenenfalls geändert werden.
 
-Die Anwendung ist ein lokaler Prototyp für Linux, Windows und macOS. Sie steuert eine eigene Chrome-/Chromium-Instanz und überträgt immer den gesamten ausgewählten Bildschirm. Der gewohnte Systemdialog zur Bildschirmauswahl bleibt erhalten.
+Die Anwendung ist ein lokaler Prototyp für Linux, Windows und macOS. Sie steuert eine eigene Chrome-/Chromium-Instanz und überträgt im Bildschirmmodus den gesamten ausgewählten Bildschirm. Unter Linux wird bei reinen Audioempfängern automatisch der Computerton übertragen. Der gewohnte Systemdialog zur Bildschirmauswahl bleibt erhalten.
 
 ## Downloads
 
-Die portablen Pakete enthalten die Node.js-Laufzeit. Du brauchst zusätzlich installiertes Chrome oder Chromium und Zugang zum selben Netz wie die AirServer.
+Das Windows-Setup und die portablen Pakete enthalten die Node.js-Laufzeit. Du brauchst zusätzlich installiertes Chrome oder Chromium und Zugang zum selben Netz wie die AirServer.
 
-| System | Download | Start nach dem vollständigen Entpacken |
+| System | Download | Installation bzw. Start |
 | --- | --- | --- |
-| Windows x64 | [ZIP herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-windows-x64.zip) | `Raumcast.cmd` |
+| Windows x64 (Setup) | [Setup herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-windows-x64-setup.exe) | Setup ausführen, danach „Raumcast“ im Startmenü öffnen |
+| Windows x64 (portabel) | [ZIP herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-windows-x64.zip) | `Raumcast.exe` (alternativ `Raumcast.cmd` zur Diagnose) |
 | macOS Apple Silicon (M-Serie) | [Archiv herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-macos-arm64.tar.gz) | `Raumcast.command` |
 | macOS Intel | [Archiv herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-macos-x64.tar.gz) | `Raumcast.command` |
 | Linux x64, etwa Manjaro | [Archiv herunterladen](https://github.com/asbl/raumcast/releases/latest/download/raumcast-linux-x64.tar.gz) | `Raumcast.sh` |
+
+Das Windows-Setup ist eine einzelne Datei und installiert für den aktuellen Benutzer ohne Administratorrechte. Es legt einen Startmenüeintrag an; Raumcast startet darüber ohne sichtbare Kommandozeile. Die Deinstallation erfolgt über die Windows-Einstellungen. Gespeicherte Räume und das Browserprofil bleiben dabei erhalten. Das ZIP bleibt als portable Alternative verfügbar.
 
 [Alle Releases](https://github.com/asbl/raumcast/releases) · [SHA-256-Prüfsummen](https://github.com/asbl/raumcast/releases/latest/download/SHA256SUMS.txt)
 
@@ -106,7 +109,7 @@ $env:RAUMCAST_BROWSER = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 npm start
 ```
 
-Die automatische Windows-Erkennung berücksichtigt die üblichen Chrome-Installationspfade. macOS kann zusätzlich die Berechtigung zur Bildschirmaufnahme verlangen. GitHub Actions prüft die Anwendungstests sowie die entpackten Laufzeiten und Programmimporte auf Windows x64, macOS Intel und macOS Apple Silicon. Der vollständige Browser-UI-Test und der portable Browserstart werden unter Linux geprüft. Die reale Bildschirmübertragung auf Windows und macOS bleibt vor Ort zu testen. Der Startmenü-Installer ist Linux-spezifisch.
+Die automatische Windows-Erkennung berücksichtigt die üblichen Chrome-Installationspfade. macOS kann zusätzlich die Berechtigung zur Bildschirmaufnahme verlangen. GitHub Actions prüft die Anwendungstests sowie die entpackten Laufzeiten und Programmimporte auf Windows x64, macOS Intel und macOS Apple Silicon. Der vollständige Browser-UI-Test und der portable Browserstart werden unter Linux geprüft. Unter Windows prüft die CI zusätzlich Installation, den neuen EXE-Starter mit Demo-Oberfläche und Deinstallation (`npm run test:package -- --installer --browser`). Die reale Bildschirmübertragung auf Windows und macOS bleibt vor Ort zu testen. Der zusätzliche Shell-Installer für portable Pakete ist Linux-spezifisch.
 
 Standardverzeichnis für Browserprofil und `rooms.json`:
 
@@ -122,7 +125,7 @@ Mit `RAUMCAST_DATA_DIR` kann ein anderes Datenverzeichnis gewählt werden. Zum m
 
 `src/main.ts` startet den Browser über Puppeteer und verbindet die lokale Oberfläche mit `src/controller.ts`. Der Controller verarbeitet Cast-Ereignisse und kontrolliert Verbindungszustände. `src/storage.ts` speichert Raumnamen, Favoriten und letzte Nutzung atomar. `ui/` enthält die Oberfläche ohne Framework.
 
-Die Steuerung verwendet eine Prozess-Pipe, keinen offenen Debugging-Port. Die Oberfläche wird direkt aus lokalen Dateien geladen; es gibt keinen HTTP-Server. Das Browserprofil ist vom normalen Browser getrennt. Puppeteers übliche Startargumente würden MediaRouter deaktivieren; daher verwenden wir bewusst eigene minimale Startargumente.
+Die Steuerung verwendet eine Prozess-Pipe, keinen offenen Debugging-Port. Die Oberfläche wird direkt aus lokalen Dateien geladen. Im Audiomodus läuft zusätzlich ein temporärer HTTP-Endpunkt mit zufälligem URL-Pfad. Er liefert den Musikstream direkt an den ausgewählten Receiver. Der Zugriff ist auf dessen IP-Adresse und den eigenen Rechner beschränkt. Die Bedienseite wird über Loopback geöffnet, und die privilegierten Lautstärkebefehle sind auf genau diese Seite begrenzt. Der Endpunkt wird beim Beenden geschlossen. Das Browserprofil ist vom normalen Browser getrennt. Puppeteers übliche Startargumente würden MediaRouter deaktivieren; daher verwenden wir bewusst eigene minimale Startargumente.
 
 Die CDP-Cast-Schnittstelle ist experimentell. Eine vom Empfänger gemeldete Sitzung beweist nicht, dass am Display ein korrektes Bild erscheint. Die Oberfläche sagt deshalb „Sitzung gemeldet“. Die Anwendung kann fremde Sitzungen nicht zuverlässig einem Besitzer zuordnen; sie startet keine Verbindung zu bereits als belegt gemeldeten Empfängern und bietet Stoppen nur für selbst angefragte Ziele an.
 
@@ -141,6 +144,62 @@ npm run package
 npm run test:package -- --browser
 ```
 
-Der Paketbau benötigt Linux sowie `tar`, `zip` und `unzip`. Er lädt die in `package.json` festgelegte Node.js-Version von nodejs.org, prüft die offiziellen SHA-256-Prüfsummen und legt vier Pakete unter `release/` ab. Entwicklungsabhängigkeiten und persönliche Browserprofile sind nicht enthalten. Node.js-Lizenz und die Lizenzdateien der npm-Abhängigkeiten liegen den Paketen bei.
+Der Paketbau benötigt Linux sowie `tar`, `zip`, `unzip` und NSIS (`makensis`, unter Debian/Ubuntu: `sudo apt-get install nsis`). Er lädt die in `package.json` festgelegte Node.js-Version von nodejs.org, prüft die offiziellen SHA-256-Prüfsummen und legt vier Archive und das Windows-Setup unter `release/` ab. Entwicklungsabhängigkeiten und persönliche Browserprofile sind nicht enthalten. Node.js-Lizenz und die Lizenzdateien der npm-Abhängigkeiten liegen den Paketen bei.
 
 Der Workflow „Test and portable downloads“ baut und prüft die Pakete. Eine manuell gestartete Ausführung mit `publish=true` veröffentlicht nach erfolgreichen Tests die Version aus `package.json` als Release. Für weitere Releases muss die Versionsnummer erhöht werden.
+
+### Erkannte Audioempfänger
+
+Ein erkannter Cast-Empfänger unterstützt nicht automatisch Bildschirmübertragung.
+Vor einem Start prüft Raumcast deshalb die Desktop-Quellen in Chromiums
+`chrome://media-router-internals/`. Bei einem bestätigten reinen Audioempfänger wählt Raumcast automatisch den Computerton. Bei Displays wird weiterhin der Bildschirm übertragen. Fehlt eine eindeutige Bestätigung der Gerätefähigkeiten, erscheint eine Fehlermeldung. Eine laufende Übertragung bleibt in diesem Fall
+erhalten. Sind die Diagnosedaten nicht verfügbar oder nicht eindeutig, wird der
+Start ebenfalls abgelehnt. Die Shield kann weiterhin verwendet werden, sofern
+Chromium sie als Desktop-Empfänger meldet.
+
+Hintergrund: Der [Chromium-Cast-Handler](https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/devtools/protocol/cast_handler.cc)
+greift beim Desktop-Start ohne Nullprüfung auf die passende Quelle zu. Das
+[CDP-Cast-Protokoll](https://chromedevtools.github.io/devtools-protocol/tot/Cast/)
+übermittelt die unterstützten Übertragungsmodi nicht an Raumcast. Deshalb erfolgt
+die zusätzliche Prüfung anhand der Browserdiagnose. Diese interne Schnittstelle
+kann sich mit Browserupdates ändern; dann wird der Start mit einer Fehlermeldung
+abgebrochen.
+
+
+### Computerton unter Linux (auch Tidal im Webbrowser)
+
+1. Benötigt werden `ffmpeg`, `parec` und `pactl` sowie PulseAudio oder PipeWire mit PulseAudio-Kompatibilität. Unter Manjaro stammen die Programme aus `ffmpeg` und `libpulse`; unter Debian/Ubuntu aus `ffmpeg` und `pulseaudio-utils`.
+2. Raumcast starten. Eine gesonderte Modusauswahl ist nicht nötig.
+3. Einen freien Cast-Audioempfänger (z. B. Onkyo) auswählen. Raumcast erkennt anhand der gemeldeten Fähigkeiten, ob es sich um einen reinen Audioempfänger handelt, und startet automatisch den Computerton. Displays, Shield und AirServer verwenden bei bestätigter Desktop-Unterstützung weiterhin den Bildschirmmodus.
+4. Tidal im normalen Browser abspielen. Es werden alle Klänge der beim Start gewählten Standardausgabe erfasst, einschließlich Benachrichtigungen. Anwendungen auf anderen Audioausgängen werden nicht mit erfasst. Die lokale Wiedergabe von Tidal bleibt bestehen.
+5. Mit „Übertragung beenden“ stoppen oder das Raumcast-Hauptfenster schließen. Beim Wechsel des Standard-Audioausgangs die Übertragung neu starten.
+
+Die Aufnahme liest ausschließlich den Monitor der Audioausgabe, nicht das Mikrofon. Es wird keine Audiodatei gespeichert. PCM-Stereo (48 kHz, 16 Bit) wird als MP3 mit 320 kbit/s kodiert und über den Default Media Receiver direkt abgespielt. Der zusätzliche Weg durch Browserwiedergabe, erneute Tonaufnahme und Opus-Mirroring entfällt. Der Audio-Tab dient der Receiver-Lautstärke und spielt den Ton nicht lokal ab. Die Audioaufnahme und der lokale Endpunkt werden bei Stopp, Aufnahmefehler oder bestätigtem Sitzungsende geschlossen.
+
+Cast puffert den Ton: Dieser Modus eignet sich für Musik, weniger für lippensynchrones Video. Die Cast-Übertragung ist nicht als verlustfreier Tidal-HiRes-Weg zugesichert. Sie hängt nicht von einer Cast-Funktion der Tidal-Webseite ab. Windows und macOS haben in dieser Version keinen Modus zum Erfassen des gesamten Computertons; die Bildschirmfunktion bleibt verfügbar.
+
+`npm run test:audio` prüft unter Linux die echte Audioaufnahme und deren Dekodierung in einem stummgeschalteten Testbrowser. Der Test benötigt die genannten Audioprogramme und eine laufende Audioausgabe. Er verbindet sich mit keinem Cast-Gerät. Der UI-Test prüft den Audiomodus mit simulierten Empfängern; die Wiedergabe auf einem echten Onkyo muss vor Ort geprüft werden.
+
+
+Beim lokalen Onkyo-Test wurde festgestellt, dass der Startmenüeintrag auf `/home/sbl/code/git/raumcast` zeigte, während Änderungen zunächst in einer zweiten Kopie lagen. Die gestartete Kopie ist jetzt ebenfalls aktualisiert. Chromium 155 meldet hier leere `discovered_sinks` und auf acht Zeichen gekürzte Geräte-IDs. Raumcast gleicht diese deshalb mit den vollständigen CDP-IDs ab und berücksichtigt die tatsächlichen Desktop-/Tab-Ergebnisse. Der echte Onkyo TX-L50 wurde damit per normalem Empfängerklick verbunden: Status `active`, Modus `audio`, keine Fehlermeldung; die Testübertragung wurde anschließend beendet. Die hörbare Wiedergabe am Receiver ist vom Nutzer zu prüfen.
+
+Unter dem Datenverzeichnis entsteht `raumcast.log` mit Programmordner, Browserversion, gewähltem Modus und Verbindungsfehlern. Audiodaten werden darin nicht gespeichert.
+
+
+### Stabilität und Receiver-Lautstärke
+
+Der geöffnete Audio-Tab enthält einen Regler „Receiver-Lautstärke“ und eine Stummschaltung. Diese steuern den Cast-Lautstärkewert des gewählten Receivers direkt; es handelt sich nicht um die Lautstärke des Firefox-Tabs. Der aktuelle Gerätewert wird abgefragt und regelmäßig aktualisiert. Beim Verbinden wird die Lautstärke nicht automatisch verändert. Die Zuordnung erfolgt per vollständiger Cast-Geräte-ID. Kann ein Empfänger seine Lautstärke nicht regeln oder ist die direkte Verbindung nicht erreichbar, zeigt der Tab das an; die Audioübertragung bleibt davon unabhängig.
+
+Eine Erhöhung des Chromium-Puffers beseitigte die hörbaren Aussetzer nicht. In der längeren Messung hatte der Browser konstant über eine Sekunde Daten vorrätig, während der Mirroring-Pfad regelmäßig Audioframes verwarf. Für Musik verwendet Raumcast deshalb jetzt einen direkten MP3-Livestream mit TCP-Übertragung und Receiver-Pufferung. Der Receiver bestätigt den Start erst mit PLAYING; beim Beenden wird ausschließlich die von Raumcast gestartete Mediensitzung beendet. Vor der ersten Auslieferung werden etwa zwei Sekunden MP3-Daten gesammelt, damit der Receiver auch nach dem Start einen Vorlauf hat. Der Start kann mehrere Sekunden dauern. MP3 mit 320 kbit/s ist kein verlustfreier HiRes-Weg. Die Bildschirmfunktion behält ihren bisherigen Browserpfad und dessen Standardpuffer.
+
+Die Lautstärkeregelung wurde am Onkyo TX-L50 durch Auslesen und Zurückschreiben des unveränderten Werts (26 %) sowie über den Regler im Audio-Tab geprüft. Die Cast-Verbindung blieb aktiv. Die Abhängigkeit `protobufjs` wird für `castv2-client` explizit auf eine aktuelle Version überschrieben; `npm audit` meldet im geprüften Stand keine Schwachstellen.
+
+
+Der Receiver-Regler nutzt standardmäßig den Feinbereich 0–40 % über die volle Breite des Audio-Tabs. Pfeiltasten ändern um 0,1 Prozentpunkte, die Plus-/Minus-Tasten um 0,5 Prozentpunkte; die Anzeige zeigt Dezimalwerte. Der volle Bereich 0–100 % lässt sich ohne Änderung der Lautstärke einblenden. Liegt der Gerätewert bereits über 40 %, wird automatisch der volle Bereich angezeigt. Halbe Prozentpunkte wurden am Onkyo TX-L50 geprüft. Bei schnellen Eingaben wird der zuletzt gewünschte Wert nach einer noch laufenden Anfrage gesendet.
+
+
+### Auditkorrekturen
+
+Die sieben Befunde des vollständigen Audits sind im lokalen Quellstand korrigiert; Details stehen in [AUDIT-FIXES-2026-10-30.md](AUDIT-FIXES-2026-10-30.md). Audio-Stop und Medienereignisse bleiben an die eigene Sitzung gebunden. Ein fehlgeschlagener Stop kann erneut verbunden werden. Lautstärketasten lesen jeweils den aktuellen Gerätewert; Tastaturfokus blockiert keine Statusabfrage. Schreibfehler bleiben bis zum erfolgreichen Speichern sichtbar, und die Cast-Suche kann nach einem Initialisierungsfehler wiederholt werden.
+
+`npm run test:audit` prüft die korrigierten Fehlerfälle mit simulierten Empfängern und echtem Browser. `npm run test:audio` prüft den produktiven MP3-Pfad einschließlich Vorlauf. Die CI führt beide Prüfungen zusätzlich aus. Browser-UI-Tests sollten nacheinander ausgeführt werden.

@@ -8,6 +8,7 @@ let visible = [];
 let lastList = '';
 let renameTarget = null;
 let localBusy = false;
+let commandError = '';
 
 async function call(action, payload) {
   try {
@@ -15,6 +16,7 @@ async function call(action, payload) {
     if (!result.ok) throw new Error(result.error);
     return result.data;
   } catch (error) {
+    if (action !== 'snapshot') commandError = error.message;
     $('error').textContent = error.message;
     $('error').hidden = false;
     return null;
@@ -24,6 +26,7 @@ async function command(action, payload) {
   if (localBusy && ['start', 'stop', 'refresh'].includes(action)) return;
   const control = ['start', 'stop', 'refresh'].includes(action);
   if (control) localBusy = true;
+  commandError = '';
   $('error').hidden = true;
   render();
   try { await call(action, payload); }
@@ -36,7 +39,7 @@ function element(tag, className, text) {
   return el;
 }
 function canConnect(room) {
-  return room.available && !room.ambiguous && !room.session && !snapshot.busy && !localBusy && !snapshot.initializationError && snapshot.phase !== 'pending';
+  return room.available && !room.ambiguous && !room.session && !snapshot.busy && !localBusy && !snapshot.initializationError && !snapshot.initializing && snapshot.phase !== 'pending';
 }
 function renderPrefixes(rooms) {
   const prefixes = [...new Set(rooms.map(room => room.prefix))];
@@ -60,15 +63,32 @@ function render() {
   renderPrefixes(rooms);
   const target = rooms.find(r => r.name === owned);
   const label = target?.label || owned || '';
-  const titles = { idle:'Zur Bildschirmübertragung bereit', starting:`Bildschirm für ${label} auswählen`, pending:`Verbindung mit ${label} angefragt`, active:`Sitzung gemeldet: ${label}`, uncertain:`Verbindung mit ${label} nicht bestätigt`, stopping:'Übertragung wird beendet …' };
+  const audio = !!owned && snapshot.mode === 'audio';
+  $('audio-note').hidden = !audio;
+  $('transfer-note').textContent = audio ? 'Zum Beenden der Audioübertragung dieses Fenster verwenden oder Raumcast schließen.' : 'Audioempfänger übertragen automatisch den Computerton. Bei Displays bestätigst du den Bildschirm im Systemdialog.';
+  const titles = { idle:'Zur Bildschirmübertragung bereit', starting:`Bildschirm für ${label} auswählen`, pending:`Verbindung mit ${label} angefragt`, active:`Sitzung gemeldet: ${label}`, buffering:`Ton für ${label} wird gepuffert …`, uncertain:`Verbindung mit ${label} nicht bestätigt`, stopping:'Übertragung wird beendet …' };
   const instructions = {
-    idle:'Wähle einen Raum. Danach bestätigst du deinen Bildschirm im Systemdialog.',
+    idle:'Wähle einen Empfänger. Raumcast wählt Bildschirm oder Computerton passend zum Gerät.',
     starting:'Bitte den Bildschirmdialog bestätigen oder abbrechen. Die Anfrage kann etwas dauern.',
     pending:'Noch keine aktive Sitzung bestätigt. Prüfe den Bildschirmdialog oder beende die Anfrage.',
+    buffering:'Der Receiver lädt Audiodaten nach. Du kannst die Übertragung weiterhin beenden.',
     active:'Prüfe das Bild im Raum. Dieses Fenster kannst du jetzt minimieren.',
     uncertain:'Der Sitzungsstatus ist unklar. Die Übertragung könnte noch laufen. Du kannst sie weiterhin beenden; bei Problemen schließe Raumcast.',
     stopping:'Die Verbindung zum Empfänger wird beendet.',
   };
+  if (audio) {
+    titles.idle = 'Zur Audioübertragung bereit';
+    titles.starting = `Computerton mit ${label} verbinden …`;
+    instructions.idle = 'Wähle deinen Receiver und starte Tidal im normalen Browser. Die Lautstärke deiner Computer-Ausgabe beeinflusst den übertragenen Ton.';
+    instructions.starting = 'Die Audioausgabe wird mit dem Empfänger verbunden.';
+    instructions.pending = 'Noch keine aktive Audiositzung bestätigt. Du kannst die Anfrage beenden.';
+    instructions.active = 'Computerton wird übertragen. Lass Tidal in deinem Browser laufen und prüfe den Ton am Receiver.';
+  }
+  if (snapshot.busy && !owned) { titles.idle = 'Empfänger wird geprüft …'; instructions.idle = 'Der passende Übertragungsmodus wird ermittelt.'; }
+  if (snapshot.initializing || snapshot.initializationError) {
+    titles[phase] = snapshot.initializing ? 'Cast wird vorbereitet …' : 'Cast ist nicht bereit';
+    instructions[phase] = snapshot.initializing ? 'Empfängersuche wird vorbereitet.' : 'Über „Suchen“ kannst du die Verbindung erneut versuchen.';
+  }
   $('connection').textContent = titles[phase];
   $('instruction').textContent = instructions[phase];
   $('dot').className = `dot ${phase === 'active' ? 'active' : phase === 'idle' ? '' : 'pending'}`;
@@ -77,11 +97,10 @@ function render() {
   $('stop').hidden = !owned;
   $('stop').textContent = phase === 'pending' ? 'Anfrage beenden' : 'Übertragung beenden';
   $('stop').disabled = snapshot.busy || localBusy;
-  $('refresh').disabled = snapshot.busy || !!owned || localBusy || !!snapshot.initializationError;
-  if (snapshot.issue || snapshot.initializationError) {
-    $('error').textContent = snapshot.initializationError || snapshot.issue;
-    $('error').hidden = false;
-  }
+  $('refresh').disabled = snapshot.busy || !!owned || localBusy || !!snapshot.initializing;
+  const errorMessage = snapshot.initializationError || snapshot.issue || commandError;
+  $('error').textContent = errorMessage;
+  $('error').hidden = !errorMessage;
   const query = $('search').value.trim().toLocaleLowerCase('de');
   visible = rooms.filter(r => (prefixFilter === '*' || r.prefix === prefixFilter) && (!favoritesOnly || r.favorite) && `${r.label} ${r.code} ${r.name}`.toLocaleLowerCase('de').includes(query))
     .sort((a,b) => Number(b.available)-Number(a.available) || Number(b.favorite)-Number(a.favorite) || b.lastUsed-a.lastUsed || a.label.localeCompare(b.label, 'de', { numeric:true }));
@@ -90,7 +109,7 @@ function render() {
   $('count').textContent = `${rooms.filter(r => r.available).length} Empfänger verfügbar · ${visible.length} angezeigt`;
   $('empty').hidden = visible.length > 0;
   $('empty').firstElementChild.textContent = query || favoritesOnly || prefixFilter !== '*' ? 'Keine passenden Räume' : 'Suche nach Räumen …';
-  const signature = JSON.stringify([visible, selectedName, snapshot.busy, localBusy, phase, owned, snapshot.initializationError]);
+  const signature = JSON.stringify([visible, selectedName, snapshot.busy, localBusy, phase, owned, audio, snapshot.initializationError, snapshot.initializing]);
   if (signature === lastList) return;
   lastList = signature;
   // Preserve keyboard focus across discovery/status updates.
@@ -104,7 +123,7 @@ function render() {
     connect.dataset.action = 'connect';
     connect.disabled = !canConnect(room);
     connect.append(element('strong', '', room.label), element('small', '', room.name));
-    connect.title = `Bildschirm an ${room.label} übertragen`;
+    connect.title = `Mit ${room.label} verbinden; Übertragungsmodus automatisch wählen`;
     connect.onclick = () => command('start', { name:room.name });
     const badge = element('span', 'badge', room.ambiguous ? 'Mehrdeutig' : !room.available ? 'Nicht verfügbar' : room.name === owned ? 'Ausgewählt' : room.session ? 'Belegt' : 'Verfügbar');
     const favorite = element('button', `icon${room.favorite ? ' starred' : ''}`, room.favorite ? '★' : '☆');
