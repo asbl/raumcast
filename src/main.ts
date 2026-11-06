@@ -5,7 +5,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CastController } from './controller.js';
 import { dataDirectory, PreferenceStore } from './storage.js';
-import { findBrowser } from './browser.js';
+import { findBrowser, browserGraphicsArgs } from './browser.js';
 import { ChromiumCastTransport } from './cast-support.js';
 import { DemoTransport } from './demo.js';
 import { sameLocalFile } from './local-ui.js';
@@ -36,6 +36,8 @@ export async function launch() {
   const store = new PreferenceStore(join(data, 'rooms.json'));
   await store.load();
   const url = pathToFileURL(join(root, 'ui', 'index.html')).href;
+  const graphicsArgs = browserGraphicsArgs();
+  log(`Plattform: ${process.platform}; Grafik: ${graphicsArgs.length ? 'Software (--disable-gpu)' : 'Browserstandard'}`);
   // Puppeteer's defaults disable MediaRouter. Use only explicit arguments so
   // Cast discovery stays enabled and no feature overrides replace user defaults.
   browser = await puppeteer.launch({
@@ -43,7 +45,7 @@ export async function launch() {
     dumpio: process.env.RAUMCAST_DEBUG === '1',
     userDataDir: join(data, 'browser-profile'), defaultViewport: null,
     ignoreDefaultArgs: true, protocolTimeout: 120_000,
-    args: ['--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check',
+    args: ['--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check', ...graphicsArgs,
       '--window-size=620,780', `--user-data-dir=${join(data, 'browser-profile')}`, `--app=${url}`],
   });
   log(`Browser: ${await browser.version()}`);

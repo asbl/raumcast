@@ -1,3 +1,7 @@
+Raumcast 0.1.2 startet unter Windows standardmäßig ohne GPU-Beschleunigung. Das soll leere App-Fenster bei Grafiktreiberproblemen umgehen, bei denen die Oberfläche geladen ist und der Mauszeiger auf unsichtbare Bedienelemente reagiert. Die Ursache am betroffenen Rechner ist noch nicht abschließend bestätigt. Der Grafikmodus wird protokolliert; `--enable-gpu` erlaubt einen Vergleich mit dem Browserstandard. Die Softwaredarstellung kann mehr CPU benötigen.
+
+Der Pakettest prüft jetzt auch die Bildinhalte des Screenshots, damit ein leeres PNG nicht mehr als erfolgreicher Oberflächentest zählt. Automatisierte Tests ersetzen weiterhin keinen Test am betroffenen Windows-Rechner und am AirServer.
+
 Raumcast 0.1.1 verbessert den Windows-Start und bietet erstmals eine einzelne Setup-EXE als Download. Das Setup enthält die Node.js-Laufzeit, installiert für den aktuellen Benutzer ohne Administratorrechte und legt einen Startmenüeintrag an. Der EXE-Starter öffnet keine Kommandozeile. Das ZIP bleibt als portable Alternative verfügbar.
 
 Der Start wartet auf das App-Fenster, behandelt Windows-Dateipfade robust und meldet einen Fehler, wenn die Oberfläche nicht geladen werden kann. Die Windows-CI prüft Installation, Demo-Oberfläche über den EXE-Starter und Deinstallation.
@@ -27,7 +31,7 @@ Neu im Quellstand:
 - Prüfung der unterstützten Cast-Modi vor dem Start schützt vor dem Chromium-Absturzpfad bei reinen Audioempfängern.
 - Unter Linux wählt Raumcast bei reinen Audioempfängern automatisch „Computerton“, um die aktuelle Standard-Audioausgabe einschließlich Tidal im Webbrowser zu übertragen. Displays bleiben im Bildschirmmodus; eine separate Modusauswahl entfällt. Benötigt werden `ffmpeg`, `parec` und `pactl` (Manjaro: `ffmpeg` und `libpulse`).
 - Die Aufnahme endet beim Stoppen, Schließen und bei Verbindungsverlust. Der Audio-Endpunkt lauscht ausschließlich lokal; es werden keine Audiodateien gespeichert.
-- 48 Anwendungstests sowie UI- und echte Audioaufnahme-/Browserdekodiertests geprüft. Verbindungsaufbau und Stopp am echten Onkyo TX-L50 ohne Absturz geprüft; die hörbare Wiedergabe bleibt vor Ort zu bestätigen. Cast bringt Pufferverzögerung mit und ist kein zugesicherter verlustfreier HiRes-Übertragungsweg.
+- 50 Anwendungstests sowie UI- und echte Audioaufnahme-/Browserdekodiertests geprüft. Verbindungsaufbau und Stopp am echten Onkyo TX-L50 ohne Absturz geprüft; die hörbare Wiedergabe bleibt vor Ort zu bestätigen. Cast bringt Pufferverzögerung mit und ist kein zugesicherter verlustfreier HiRes-Übertragungsweg.
 
 - Computerton wird als direkter MP3-Livestream mit 320 kbit/s an den Default Media Receiver gesendet. Der Browser-Mirroring-Pfad für Audio entfällt. Der Stream-Endpunkt erlaubt ausschließlich den ausgewählten Receiver und den eigenen Rechner.
 - Receiver-Lautstärke und Stummschaltung direkt im Audio-Tab, einschließlich Anzeige des aktuellen Gerätewerts; am Onkyo TX-L50 geprüft.

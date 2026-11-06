@@ -2,6 +2,13 @@ import { access } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { delimiter, join } from 'node:path';
 
+export function browserGraphicsArgs(platform: NodeJS.Platform = process.platform, args: readonly string[] = process.argv): string[] {
+  // Some Windows drivers leave an app window blank even though its DOM and
+  // hit-testing work. Use Chromium's software rendering path on Windows.
+  return args.includes('--disable-gpu') || (platform === 'win32' && !args.includes('--enable-gpu'))
+    ? ['--disable-gpu'] : [];
+}
+
 export async function findBrowser(): Promise<string> {
   const override = process.env.RAUMCAST_BROWSER;
   const candidates = override ? [override] : process.platform === 'darwin' ? [

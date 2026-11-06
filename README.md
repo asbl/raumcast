@@ -109,6 +109,8 @@ $env:RAUMCAST_BROWSER = 'C:\Program Files\Google\Chrome\Application\chrome.exe'
 npm start
 ```
 
+Unter Windows startet Raumcast ab Version 0.1.2 standardmäßig mit Softwaredarstellung (`--disable-gpu`). Das umgeht den GPU-Pfad bei leeren Fenstern, deren Bedienelemente trotzdem auf den Mauszeiger reagieren. Der Grafikmodus steht in `raumcast.log`. Zum Vergleich kann `Raumcast.exe --enable-gpu` den Browserstandard verwenden; `--disable-gpu` erzwingt die Softwaredarstellung auch unter Linux und macOS. Die Softwaredarstellung kann die CPU-Auslastung erhöhen. Die Bildschirmübertragung muss weiterhin am jeweiligen Gerät geprüft werden.
+
 Die automatische Windows-Erkennung berücksichtigt die üblichen Chrome-Installationspfade. macOS kann zusätzlich die Berechtigung zur Bildschirmaufnahme verlangen. GitHub Actions prüft die Anwendungstests sowie die entpackten Laufzeiten und Programmimporte auf Windows x64, macOS Intel und macOS Apple Silicon. Der vollständige Browser-UI-Test und der portable Browserstart werden unter Linux geprüft. Unter Windows prüft die CI zusätzlich Installation, den neuen EXE-Starter mit Demo-Oberfläche und Deinstallation (`npm run test:package -- --installer --browser`). Die reale Bildschirmübertragung auf Windows und macOS bleibt vor Ort zu testen. Der zusätzliche Shell-Installer für portable Pakete ist Linux-spezifisch.
 
 Standardverzeichnis für Browserprofil und `rooms.json`:

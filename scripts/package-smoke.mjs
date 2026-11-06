@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { PNG } from 'pngjs';
 const target = process.platform === 'win32' ? 'windows-x64' : process.platform === 'darwin' ? `macos-${process.arch}` : `linux-${process.arch}`;
 const archive = resolve('release', `raumcast-${target}.${process.platform === 'win32' ? 'zip' : 'tar.gz'}`);
 const temp = await mkdtemp(join(tmpdir(), 'raumcast-paket-'));
@@ -35,7 +36,20 @@ try {
       [...(installer ? [] : [join(installedApp, 'dist', 'main.js')]), '--demo', '--smoke'], {
       cwd:installedApp, stdio:'inherit', env:{ ...process.env, RAUMCAST_DATA_DIR:join(temp, 'profile') }, timeout:90_000,
     });
-    assert.equal((await readFile(join(installedApp, 'artifacts', 'demo.png'))).subarray(1, 4).toString(), 'PNG');
+    const image = PNG.sync.read(await readFile(join(installedApp, 'artifacts', 'demo.png')));
+    assert.ok(image.width >= 300 && image.height >= 300, 'App screenshot must show a usable window');
+    // The header contains both light and dark pixels in either color theme.
+    // This catches uniform white/black screenshots that DOM checks cannot.
+    const headerHeight = Math.min(image.height, 200);
+    let dark = 0;
+    let light = 0;
+    for (let i = 0; i < image.width * headerHeight * 4; i += 4) {
+      const brightness = (image.data[i] + image.data[i + 1] + image.data[i + 2]) / 3;
+      if (brightness < 120) dark++;
+      if (brightness > 200) light++;
+    }
+    const pixels = image.width * headerHeight;
+    assert.ok(dark / pixels > 0.005 && light / pixels > 0.005, 'App screenshot is blank or lacks the visible Raumcast header');
   }
   if (installer) {
     execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',

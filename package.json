@@ -1,6 +1,6 @@
 {
   "name": "raumcast",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "Raumauswahl und Bildschirmübertragung an AirServer mit Chromium",
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
+    "pngjs": "^7.0.0",
     "tsx": "^4.20.0",
     "typescript": "^5.9.0"
   },
