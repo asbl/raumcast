@@ -13,6 +13,28 @@ try {
   const page = app.page;
   page.setDefaultTimeout(30000);
   await page.bringToFront();
+  // Reproduce the initial app-window load before the command bridge is attached.
+  const delayed = await app.browser.newPage();
+  try {
+    await delayed.goto(page.url());
+    await delayed.waitForFunction(() => typeof (window as any).raumcast === 'undefined');
+    assert.equal(await delayed.$eval('#error', el => (el as HTMLElement).hidden), true);
+    await delayed.click('#refresh');
+    assert.equal(await delayed.$eval('#error', el => (el as HTMLElement).hidden), true);
+    // Advance the connection deadline without making the test wait 15 seconds.
+    await delayed.evaluate(async () => {
+      const now = Date.now;
+      Date.now = () => now() + 16000;
+      try { await (window as any).poll(); }
+      finally { Date.now = now; }
+    });
+    assert.equal(await delayed.$eval('#error', el => !(el as HTMLElement).hidden && el.textContent?.includes('Verbindung zur Raumcast-Steuerung fehlt')), true);
+    const initialSnapshot = await page.evaluate(() => (window as any).raumcast('snapshot'));
+    await delayed.exposeFunction('raumcast', () => initialSnapshot);
+    await delayed.waitForSelector('.room');
+    assert.equal(await delayed.$eval('#error', el => (el as HTMLElement).hidden), true);
+  } finally { await delayed.close(); }
+  await page.bringToFront();
   await page.waitForSelector('.room');
   assert.equal(await page.$$eval('.room', rows => rows.length), 7);
   await page.type('#search', '208');

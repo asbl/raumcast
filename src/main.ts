@@ -53,6 +53,7 @@ export async function launch() {
   // Wait for the app window itself; an initial/other tab can otherwise receive
   // the bridge while the visible app window remains uninitialized.
   const target = await browser.waitForTarget(t => t.type() === 'page' && sameLocalFile(t.url(), url), { timeout: 30_000 });
+  log(`App-Fenster gefunden: ${target.url()}`);
   const page = await target.page();
   if (!page) throw new Error('Das Raumcast-Fenster konnte nicht geöffnet werden.');
   // The command bridge is restricted to our local UI.
@@ -106,9 +107,11 @@ export async function launch() {
       return { ok: false, error: message };
     }
   });
+  log('Programmsteuerung bereitgestellt; Oberfläche wird geladen.');
   await page.goto(url);
   try {
-    await page.waitForFunction(() => !!document.querySelector('#search') && !!document.querySelector('#count')?.textContent, { timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as any).raumcast === 'function' && !!document.querySelector('#search') && !!document.querySelector('#count')?.textContent, { timeout: 15_000 });
+    log('Oberfläche mit Programmsteuerung verbunden.');
     await page.bringToFront();
   } catch (error) {
     log(`Oberfläche nicht startbereit: ${String(error)}`);

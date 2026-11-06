@@ -9,9 +9,16 @@ let lastList = '';
 let renameTarget = null;
 let localBusy = false;
 let commandError = '';
+const bridgeStartedAt = Date.now();
 
 async function call(action, payload) {
   try {
+    if (typeof window.raumcast !== 'function') {
+      // The app window loads before Puppeteer has installed its command bridge.
+      // Polling retries automatically while the backend is attaching.
+      if (action === 'snapshot' && Date.now() - bridgeStartedAt < 15000) return null;
+      throw new Error('Verbindung zur Raumcast-Steuerung fehlt. Bitte Raumcast schließen und erneut über das Programm starten.');
+    }
     const result = await window.raumcast(action, payload);
     if (!result.ok) throw new Error(result.error);
     return result.data;
@@ -23,6 +30,8 @@ async function call(action, payload) {
   }
 }
 async function command(action, payload) {
+  // Until connected, let polling report connection errors and clear them on recovery.
+  if (!snapshot || typeof window.raumcast !== 'function') { await poll(); return; }
   if (localBusy && ['start', 'stop', 'refresh'].includes(action)) return;
   const control = ['start', 'stop', 'refresh'].includes(action);
   if (control) localBusy = true;
