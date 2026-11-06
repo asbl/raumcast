@@ -34,15 +34,18 @@ jobs:
       - run: xvfb-run -a npm run test:ui
       - run: xvfb-run -a npm run test:audit
       - name: Prepare virtual audio output
+        timeout-minutes: 4
         run: |
+          # Avoid the slow Azure mirror on hosted runners.
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            echo 'https://archive.ubuntu.com/ubuntu/' | sudo tee /etc/apt/apt-mirrors.txt
+          fi
           sudo apt-get update
-          sudo apt-get install -y ffmpeg pulseaudio pulseaudio-utils
+          sudo apt-get install -y --no-install-recommends ffmpeg pulseaudio pulseaudio-utils nsis
           if ! pactl info >/dev/null 2>&1; then pulseaudio --start --exit-idle-time=-1; fi
           pactl load-module module-null-sink sink_name=raumcast_test
           pactl set-default-sink raumcast_test
       - run: npm run test:audio
-      - name: Install Windows installer compiler
-        run: sudo apt-get install -y nsis
       - run: npm run package
       - run: xvfb-run -a npm run test:package -- --browser
       - uses: actions/upload-artifact@v7
