@@ -1,6 +1,6 @@
-import puppeteer, { type Browser } from 'puppeteer-core';
+import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { mkdir } from 'node:fs/promises';
-import { appendFileSync, statSync, renameSync } from 'node:fs';
+import { appendFileSync, statSync, renameSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CastController } from './controller.js';
@@ -14,15 +14,35 @@ const demo = process.argv.includes('--demo');
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 let browser: Browser | undefined;
 let controller: CastController | undefined;
+let activePage: Page | undefined;
+let lockPath: string | undefined;
 let closing = false;
+export class AlreadyRunningError extends Error {}
+// A running instance that shares the browser profile would otherwise silently absorb the
+// new launch into an un-wired window (Chromium's single-instance forwarding), hanging the
+// new process instead of failing. Detect it up front via a PID lock and bail out early.
+function readLivePid(path: string): number | undefined {
+  let pid: number;
+  try { pid = Number(readFileSync(path, 'utf8').trim()); }
+  catch { return undefined; }
+  if (!Number.isInteger(pid)) return undefined;
+  try { process.kill(pid, 0); return pid; }
+  catch { return undefined; }
+}
 async function shutdown() {
   if (closing) return;
   closing = true;
   controller?.dispose();
   try { await controller?.store.flush(); }
   catch(error) { console.error(`Einstellungen konnten nicht gespeichert werden: ${String(error)}`); process.exitCode = 1; }
-  finally { await browser?.close().catch(() => {}); }
+  finally {
+    await browser?.close().catch(() => {});
+    if (lockPath) try { unlinkSync(lockPath); } catch {}
+  }
 }
+// Asks an already-running instance to raise its window; Windows cannot deliver SIGUSR1
+// between processes, so there the user just sees the "already running" message instead.
+process.on('SIGUSR1', () => { void activePage?.bringToFront().catch(() => {}); });
 
 export async function launch() {
   const data = join(dataDirectory(), ...(demo ? ['demo'] : []));
@@ -33,6 +53,15 @@ export async function launch() {
     try { appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`, { mode: 0o600 }); } catch {}
   };
   log(`Start: Programmordner ${root}; Demo ${demo}`);
+  const pidPath = join(data, 'raumcast.pid');
+  const existing = readLivePid(pidPath);
+  if (existing !== undefined) {
+    log(`Bereits laufende Instanz erkannt (PID ${existing}); Start abgebrochen.`);
+    try { process.kill(existing, 'SIGUSR1'); } catch {}
+    throw new AlreadyRunningError(`Raumcast läuft bereits (PID ${existing}). Das vorhandene Fenster wurde in den Vordergrund geholt.`);
+  }
+  writeFileSync(pidPath, String(process.pid), { mode: 0o600 });
+  lockPath = pidPath;
   const store = new PreferenceStore(join(data, 'rooms.json'));
   await store.load();
   const url = pathToFileURL(join(root, 'ui', 'index.html')).href;
@@ -56,6 +85,7 @@ export async function launch() {
   log(`App-Fenster gefunden: ${target.url()}`);
   const page = await target.page();
   if (!page) throw new Error('Das Raumcast-Fenster konnte nicht geöffnet werden.');
+  activePage = page;
   // The command bridge is restricted to our local UI.
   await page.setRequestInterception(true);
   page.on('request', request => {
@@ -136,7 +166,7 @@ export async function launch() {
 }
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { void shutdown(); });
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) launch().catch(async error => {
-  console.error(`Raumcast: ${error.message}`);
-  process.exitCode = 1;
+  if (error instanceof AlreadyRunningError) console.log(error.message);
+  else { console.error(`Raumcast: ${error.message}`); process.exitCode = 1; }
   await shutdown();
 });
