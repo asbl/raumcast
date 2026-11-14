@@ -14,5 +14,7 @@ const desktopQuote = (s: string) => '"' + s.replaceAll('\\', '\\\\\\\\').replace
 const directory = join(process.env.XDG_DATA_HOME || join(homedir(), '.local', 'share'), 'applications');
 await mkdir(directory, { recursive:true });
 const target = join(directory, 'raumcast.desktop');
-await writeFile(target, `[Desktop Entry]\nType=Application\nName=Raumcast\nComment=Bildschirm im richtigen Raum teilen\nExec=${desktopQuote(launcher)}\nIcon=video-display\nTerminal=false\nCategories=Education;\nStartupNotify=false\n`);
+// Icon= takes a plain path (no Exec-style quoting/field codes), escaped only for literal backslashes.
+const icon = join(root, 'assets', 'icon.svg').replaceAll('\\', '\\\\');
+await writeFile(target, `[Desktop Entry]\nType=Application\nName=Raumcast\nComment=Bildschirm im richtigen Raum teilen\nExec=${desktopQuote(launcher)}\nIcon=${icon}\nStartupWMClass=Raumcast\nTerminal=false\nCategories=Education;\nStartupNotify=false\n`);
 console.log(`Startmenü-Eintrag installiert: ${target}`);

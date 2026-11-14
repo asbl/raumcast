@@ -74,8 +74,12 @@ export async function launch() {
     dumpio: process.env.RAUMCAST_DEBUG === '1',
     userDataDir: join(data, 'browser-profile'), defaultViewport: null,
     ignoreDefaultArgs: true, protocolTimeout: 120_000,
+    // --class sets the X11 WM_CLASS and CHROME_DESKTOP the Wayland app_id; both are matched
+    // against the installed raumcast.desktop's StartupWMClass/filename so GNOME Shell and
+    // similar desktops show the Raumcast icon instead of a generic Chromium one.
+    env: { ...process.env, CHROME_DESKTOP: 'raumcast.desktop' },
     args: ['--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check', ...graphicsArgs,
-      '--window-size=620,780', `--user-data-dir=${join(data, 'browser-profile')}`, `--app=${url}`],
+      '--window-size=620,780', `--user-data-dir=${join(data, 'browser-profile')}`, '--class=Raumcast', `--app=${url}`],
   });
   log(`Browser: ${await browser.version()}`);
   browser.on('disconnected', () => { log(closing ? 'Browser regulär beendet.' : 'Browserverbindung unerwartet beendet.'); controller?.dispose(); });

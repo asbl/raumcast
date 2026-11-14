@@ -22,7 +22,7 @@ await mkdir(output, { recursive:true });
 await rm(common, { recursive:true, force:true });
 await mkdir(common, { recursive:true });
 for (const file of ['package.json', 'package-lock.json', 'README.md', 'AUDIT.md', 'AUDIT-IMPLEMENTATION-2026-10-30.md', 'AUDIT-FIXES-2026-10-30.md']) await cp(file, join(common, file));
-for (const dir of ['dist', 'ui']) await cp(dir, join(common, dir), { recursive:true });
+for (const dir of ['dist', 'ui', 'assets']) await cp(dir, join(common, dir), { recursive:true });
 await mkdir(join(common, 'docs'), { recursive:true });
 await cp('docs/screenshot.png', join(common, 'docs', 'screenshot.png'));
 await mkdir(join(common, 'scripts'), { recursive:true });

@@ -35,6 +35,7 @@ Section "Uninstall"
   ; Only remove shipped application files; saved rooms/profile remain untouched.
   RMDir /r "$INSTDIR\dist"
   RMDir /r "$INSTDIR\ui"
+  RMDir /r "$INSTDIR\assets"
   RMDir /r "$INSTDIR\runtime"
   RMDir /r "$INSTDIR\node_modules"
   RMDir /r "$INSTDIR\docs"
