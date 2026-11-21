@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { supportsDesktop, supportsMode, preferredMode } from '../src/cast-support.js';
+import { supportsDesktop, supportsMode, preferredMode, validateRouterState, ChromiumCastTransport } from '../src/cast-support.js';
+import { EventEmitter } from 'node:events';
+import type { Browser, CDPSession } from 'puppeteer-core';
 
 const sink = { id: 'cast:123456789', name: 'SHIELD' };
 function state(source: string, ids = ['cast:1234']) {
@@ -57,4 +59,65 @@ test('Chromium mit leeren discovered_sinks und achtstelligen IDs erkennt Onkyo u
   assert.equal(supportsMode(data, onkyo, 'tab'), true);
   assert.equal(supportsMode({ ...data, known_sinks: [...data.known_sinks, { ...onkyo, id:'cast:18abOTHER', name:'Other' }] }, onkyo, 'tab'), false);
   assert.equal(supportsMode({ ...data, known_sinks: [] }, onkyo, 'tab'), false);
+});
+test('Geänderte Diagnoseformate erzeugen eine verständliche Fehlermeldung', () => {
+  for (const value of [null, {}, { available_sinks:[] }, { available_sinks:{ desktop:'bad' } }, { available_sinks:{}, discovered_sinks:{ cast:[null] } }]) {
+    assert.throws(() => validateRouterState(value), /unbekanntes Format/);
+  }
+  assert.deepEqual(validateRouterState({ available_sinks:{} }), { available_sinks:{} });
+});
+test('Moduswahl und Prüfung teilen nur ein frisches Ergebnis für denselben Empfänger', async () => {
+  let reads = 0;
+  let closed = 0;
+  const cdp = new EventEmitter();
+  const browser = {
+    async newPage() {
+      reads++;
+      return {
+        async goto() {}, url:() => 'chrome://media-router-internals/',
+        async evaluate() { return state('CAST:urn:x-org.chromium.media:source:desktop'); },
+        async close() { closed++; },
+      };
+    },
+  };
+  const transport = new ChromiumCastTransport(browser as unknown as Browser, cdp as unknown as CDPSession);
+  cdp.emit('Cast.sinksUpdated', { sinks:[sink] });
+  assert.equal(await transport.selectMode(sink), 'desktop');
+  await transport.assertDesktopMirroringSupported(sink);
+  assert.equal(reads, 1);
+  await transport.assertDesktopMirroringSupported(sink);
+  assert.equal(reads, 2); // Consumed results cannot leak into a later start.
+  await transport.selectMode(sink);
+  cdp.emit('Cast.sinksUpdated', { sinks:[sink] });
+  await transport.assertDesktopMirroringSupported(sink);
+  assert.equal(reads, 4);
+  await transport.selectMode(sink);
+  const now = Date.now;
+  Date.now = () => now() + 2000;
+  try { await transport.assertDesktopMirroringSupported(sink); }
+  finally { Date.now = now; }
+  assert.equal(reads, 6);
+  await transport.selectMode(sink);
+  await assert.rejects(transport.assertDesktopMirroringSupported({ id:'different', name:'Other' }));
+  assert.equal(reads, 8);
+  assert.equal(closed, reads);
+});
+test('Discovery während einer Diagnose darf ein bereits verworfenes Ergebnis nicht wieder in den Cache setzen', async () => {
+  const cdp = new EventEmitter();
+  let reads = 0;
+  const browser = {
+    async newPage() {
+      const attempt = ++reads;
+      return {
+        async goto() {}, url:() => 'chrome://media-router-internals/',
+        async evaluate() { return state('CAST:urn:x-org.chromium.media:source:desktop', attempt === 1 ? ['cast:1234'] : []); },
+        async close() { if (attempt === 1) cdp.emit('Cast.sinksUpdated', { sinks:[sink] }); },
+      };
+    },
+  };
+  const transport = new ChromiumCastTransport(browser as unknown as Browser, cdp as unknown as CDPSession);
+  cdp.emit('Cast.sinksUpdated', { sinks:[sink] });
+  await transport.selectMode(sink);
+  await assert.rejects(transport.assertDesktopMirroringSupported(sink), /keine bestätigte Bildschirmübertragung/);
+  assert.equal(reads, 2);
 });

@@ -9,6 +9,10 @@ let lastList = '';
 let renameTarget = null;
 let localBusy = false;
 let commandError = '';
+let viewSettingsError = '';
+let settingsLoaded = false;
+let lastRecent = '';
+let lastHelp = '';
 const bridgeStartedAt = Date.now();
 
 async function call(action, payload) {
@@ -21,9 +25,11 @@ async function call(action, payload) {
     }
     const result = await window.raumcast(action, payload);
     if (!result.ok) throw new Error(result.error);
-    return result.data;
+    if (action === 'viewSettings') viewSettingsError = '';
+    return result.data ?? true;
   } catch (error) {
     if (action !== 'snapshot') commandError = error.message;
+    if (action === 'viewSettings') viewSettingsError = `Raumfilter konnten nicht gespeichert werden: ${error.message}`;
     $('error').textContent = error.message;
     $('error').hidden = false;
     return null;
@@ -32,13 +38,13 @@ async function call(action, payload) {
 async function command(action, payload) {
   // Until connected, let polling report connection errors and clear them on recovery.
   if (!snapshot || typeof window.raumcast !== 'function') { await poll(); return; }
-  if (localBusy && ['start', 'stop', 'refresh'].includes(action)) return;
-  const control = ['start', 'stop', 'refresh'].includes(action);
+  if (localBusy && ['start', 'stop', 'refresh', 'recover'].includes(action)) return;
+  const control = ['start', 'stop', 'refresh', 'recover'].includes(action);
   if (control) localBusy = true;
   commandError = '';
   $('error').hidden = true;
   render();
-  try { await call(action, payload); }
+  try { return await call(action, payload); }
   finally { if (control) localBusy = false; await poll(); }
 }
 function element(tag, className, text) {
@@ -47,8 +53,54 @@ function element(tag, className, text) {
   if (text !== undefined) el.textContent = text;
   return el;
 }
+function setText(id, text) {
+  if ($(id).textContent !== text) $(id).textContent = text;
+}
 function canConnect(room) {
   return room.available && !room.ambiguous && !room.session && !snapshot.busy && !localBusy && !snapshot.initializationError && !snapshot.initializing && snapshot.phase !== 'pending';
+}
+function saveFilters() {
+  void command('viewSettings', { favoritesOnly, prefix:prefixFilter });
+}
+function renderHelp() {
+  const { owned, phase, busy, initializing, initializationError, mode } = snapshot;
+  const signature = JSON.stringify([owned, phase, busy, localBusy, initializing, initializationError, mode]);
+  if (signature === lastHelp) return;
+  lastHelp = signature;
+  const steps = busy || localBusy ? [phase === 'starting' && mode !== 'audio' ? 'Bildschirmdialog bestätigen oder abbrechen.' : 'Vorgang abwarten.']
+    : owned ? ['Bild oder Ton am Gerät prüfen.', 'Bei Problemen: Übertragung beenden und neu suchen. Falls das fehlschlägt, Raumcast schließen.']
+    : initializationError ? ['Suche neu starten.', 'Falls der Fehler bleibt: Raumcast neu starten oder den Diagnosebericht weitergeben.']
+    : ['Schulnetz, AirServer und dessen Cast-Funktion prüfen.', 'Keine Geräte gefunden? Cast-Suche im normalen Chrome vergleichen.'];
+  if (owned && mode === 'audio') steps.push('Audioausgabe gewechselt? Übertragung neu starten. Cast verzögert den Ton.');
+  $('help-steps').replaceChildren(...steps.map(step => element('li', '', step)));
+  $('recover').textContent = owned ? 'Übertragung beenden und neu suchen' : 'Suche neu starten';
+  $('recover').disabled = busy || localBusy || initializing;
+}
+function renderRecent() {
+  const recent = snapshot.rooms.filter(room => room.lastUsed > 0).sort((a, b) => b.lastUsed - a.lastUsed).slice(0, 3);
+  const signature = JSON.stringify([recent, snapshot.busy, localBusy, snapshot.phase, snapshot.initializing, snapshot.initializationError]);
+  if (signature === lastRecent) return;
+  lastRecent = signature;
+  const focusedName = document.activeElement?.dataset.recentName;
+  $('recent').hidden = recent.length === 0;
+  $('recent-rooms').replaceChildren(...recent.map(room => {
+    const status = room.ambiguous ? 'mehrdeutig' : !room.available ? 'nicht verfügbar' : room.session ? 'belegt' : '';
+    const button = element('button', '', `${room.label}${status ? ' · ' + status : ''}`);
+    button.disabled = !canConnect(room);
+    button.dataset.recentName = room.name;
+    button.onclick = () => command('start', { name:room.name });
+    return button;
+  }));
+  if (focusedName) [...$('recent-rooms').children].find(button => button.dataset.recentName === focusedName)?.focus();
+}
+function renderUpdates() {
+  setText('version', snapshot.version ? `Version ${snapshot.version}` : 'Version');
+  const update = snapshot.update || { state:'idle' };
+  const messages = { idle:'', checking:'Prüft …', current:'Kein Update verfügbar.', available:`Version ${update.latest} verfügbar.`, error:update.message };
+  setText('update-status', messages[update.state] || '');
+  $('check-update').disabled = update.state === 'checking';
+  $('download').hidden = update.state !== 'available';
+  $('update-notice').hidden = update.state !== 'available';
 }
 function renderPrefixes(rooms) {
   const prefixes = [...new Set(rooms.map(room => room.prefix))];
@@ -62,62 +114,68 @@ function renderPrefixes(rooms) {
     const button = element('button', prefixFilter === prefix ? 'selected' : '', prefix === '*' ? 'Alle Bereiche' : prefix || 'Ohne Kürzel');
     button.dataset.prefix = prefix;
     button.setAttribute('aria-pressed', String(prefixFilter === prefix));
-    button.onclick = () => { prefixFilter = prefix; selectedName = undefined; render(); $('search').focus(); };
+    button.onclick = () => { prefixFilter = prefix; selectedName = undefined; render(); saveFilters(); $('search').focus(); };
     return button;
   }));
 }
 function render() {
   if (!snapshot) return;
   const { phase, owned, rooms } = snapshot;
+  const recoveries = snapshot.recoveries || [];
+  $('settings-warning').hidden = recoveries.length === 0;
+  setText('settings-recovery', recoveries.map(item => item.message).join('\n'));
+  renderHelp(); renderRecent(); renderUpdates();
   renderPrefixes(rooms);
   const target = rooms.find(r => r.name === owned);
   const label = target?.label || owned || '';
   const audio = !!owned && snapshot.mode === 'audio';
   $('audio-note').hidden = !audio;
-  $('transfer-note').textContent = audio ? 'Zum Beenden der Audioübertragung dieses Fenster verwenden oder Raumcast schließen.' : 'Audioempfänger übertragen automatisch den Computerton. Bei Displays bestätigst du den Bildschirm im Systemdialog.';
-  const titles = { idle:'Zur Bildschirmübertragung bereit', starting:`Bildschirm für ${label} auswählen`, pending:`Verbindung mit ${label} angefragt`, active:`Sitzung gemeldet: ${label}`, buffering:`Ton für ${label} wird gepuffert …`, uncertain:`Verbindung mit ${label} nicht bestätigt`, stopping:'Übertragung wird beendet …' };
+  const titles = { idle:'Bereit', starting:`Bildschirm auswählen: ${label}`, pending:`Verbinde mit ${label} …`, active:`Bildschirm → ${label}`, buffering:`Ton für ${label} wird gepuffert …`, uncertain:`Verbindung unklar: ${label}`, stopping:'Übertragung wird beendet …' };
   const instructions = {
-    idle:'Wähle einen Empfänger. Raumcast wählt Bildschirm oder Computerton passend zum Gerät.',
-    starting:'Bitte den Bildschirmdialog bestätigen oder abbrechen. Die Anfrage kann etwas dauern.',
-    pending:'Noch keine aktive Sitzung bestätigt. Prüfe den Bildschirmdialog oder beende die Anfrage.',
-    buffering:'Der Receiver lädt Audiodaten nach. Du kannst die Übertragung weiterhin beenden.',
-    active:'Prüfe das Bild im Raum. Dieses Fenster kannst du jetzt minimieren.',
-    uncertain:'Der Sitzungsstatus ist unklar. Die Übertragung könnte noch laufen. Du kannst sie weiterhin beenden; bei Problemen schließe Raumcast.',
-    stopping:'Die Verbindung zum Empfänger wird beendet.',
+    idle:'', starting:'', pending:'Bildschirmdialog prüfen oder Anfrage beenden.', buffering:'',
+    active:'Bild im Raum prüfen.',
+    uncertain:'Übertragung könnte weiterlaufen. Beenden oder Raumcast schließen.', stopping:'',
   };
   if (audio) {
-    titles.idle = 'Zur Audioübertragung bereit';
-    titles.starting = `Computerton mit ${label} verbinden …`;
-    instructions.idle = 'Wähle deinen Receiver und starte Tidal im normalen Browser. Die Lautstärke deiner Computer-Ausgabe beeinflusst den übertragenen Ton.';
-    instructions.starting = 'Die Audioausgabe wird mit dem Empfänger verbunden.';
-    instructions.pending = 'Noch keine aktive Audiositzung bestätigt. Du kannst die Anfrage beenden.';
-    instructions.active = 'Computerton wird übertragen. Lass Tidal in deinem Browser laufen und prüfe den Ton am Receiver.';
+    titles.starting = `Verbinde mit ${label} …`;
+    titles.active = `Computerton → ${label}`;
+    instructions.pending = 'Noch nicht bestätigt. Anfrage beenden oder weiter warten.';
+    instructions.active = '';
   }
-  if (snapshot.busy && !owned) { titles.idle = 'Empfänger wird geprüft …'; instructions.idle = 'Der passende Übertragungsmodus wird ermittelt.'; }
+  if (snapshot.busy && !owned) titles.idle = 'Gerät wird geprüft …';
   if (snapshot.initializing || snapshot.initializationError) {
-    titles[phase] = snapshot.initializing ? 'Cast wird vorbereitet …' : 'Cast ist nicht bereit';
-    instructions[phase] = snapshot.initializing ? 'Empfängersuche wird vorbereitet.' : 'Über „Suchen“ kannst du die Verbindung erneut versuchen.';
+    titles[phase] = snapshot.initializing ? 'Startet …' : 'Verbindung nicht bereit';
+    instructions[phase] = snapshot.initializing ? '' : 'Neu suchen oder Hilfe öffnen.';
   }
-  $('connection').textContent = titles[phase];
-  $('instruction').textContent = instructions[phase];
+  setText('connection', titles[phase]);
+  setText('instruction', instructions[phase]);
+  $('instruction').hidden = !instructions[phase];
+  const ready = !snapshot.initializing && !snapshot.initializationError;
+  $('session').dataset.phase = phase;
+  $('session').dataset.mode = snapshot.mode;
+  $('session').dataset.ready = String(ready);
+  $('session').hidden = phase === 'idle' && ready && !snapshot.busy && !localBusy;
   $('dot').className = `dot ${phase === 'active' ? 'active' : phase === 'idle' ? '' : 'pending'}`;
   $('mode').hidden = !snapshot.demo;
-  $('demo-note').hidden = !snapshot.demo;
   $('stop').hidden = !owned;
   $('stop').textContent = phase === 'pending' ? 'Anfrage beenden' : 'Übertragung beenden';
   $('stop').disabled = snapshot.busy || localBusy;
   $('refresh').disabled = snapshot.busy || !!owned || localBusy || !!snapshot.initializing;
-  const errorMessage = snapshot.initializationError || snapshot.issue || commandError;
-  $('error').textContent = errorMessage;
+  const errorMessage = snapshot.initializationError || snapshot.issue || viewSettingsError || commandError;
+  setText('error', errorMessage);
   $('error').hidden = !errorMessage;
   const query = $('search').value.trim().toLocaleLowerCase('de');
   visible = rooms.filter(r => (prefixFilter === '*' || r.prefix === prefixFilter) && (!favoritesOnly || r.favorite) && `${r.label} ${r.code} ${r.name}`.toLocaleLowerCase('de').includes(query))
     .sort((a,b) => Number(b.available)-Number(a.available) || Number(b.favorite)-Number(a.favorite) || b.lastUsed-a.lastUsed || a.label.localeCompare(b.label, 'de', { numeric:true }));
   if (selectedName === undefined) selectedName = visible[0]?.name ?? null;
   else if (!visible.some(room => room.name === selectedName)) selectedName = null;
-  $('count').textContent = `${rooms.filter(r => r.available).length} Empfänger verfügbar · ${visible.length} angezeigt`;
+  setText('count', `${visible.length} ${visible.length === 1 ? 'Gerät' : 'Geräte'}`);
+  $('count').hidden = visible.length === 0;
   $('empty').hidden = visible.length > 0;
-  $('empty').firstElementChild.textContent = query || favoritesOnly || prefixFilter !== '*' ? 'Keine passenden Räume' : 'Suche nach Räumen …';
+  const filtered = !!query || favoritesOnly || prefixFilter !== '*';
+  $('empty').firstElementChild.textContent = snapshot.initializing ? 'Suche läuft …' : filtered ? 'Keine Treffer' : 'Keine Geräte gefunden';
+  $('empty-hint').hidden = filtered || snapshot.initializing;
+  $('reset-filters').hidden = !filtered || snapshot.initializing;
   const signature = JSON.stringify([visible, selectedName, snapshot.busy, localBusy, phase, owned, audio, snapshot.initializationError, snapshot.initializing]);
   if (signature === lastList) return;
   lastList = signature;
@@ -131,10 +189,12 @@ function render() {
     connect.dataset.name = room.name;
     connect.dataset.action = 'connect';
     connect.disabled = !canConnect(room);
-    connect.append(element('strong', '', room.label), element('small', '', room.name));
-    connect.title = `Mit ${room.label} verbinden; Übertragungsmodus automatisch wählen`;
+    connect.append(element('strong', '', room.label));
+    if (room.code && room.label !== `Raum ${room.code}`) connect.append(element('small', '', room.code));
+    connect.title = room.name;
     connect.onclick = () => command('start', { name:room.name });
-    const badge = element('span', 'badge', room.ambiguous ? 'Mehrdeutig' : !room.available ? 'Nicht verfügbar' : room.name === owned ? 'Ausgewählt' : room.session ? 'Belegt' : 'Verfügbar');
+    const badge = element('span', 'badge', room.ambiguous ? 'Mehrdeutig' : !room.available ? 'Nicht verfügbar' : room.name === owned ? phase === 'active' ? 'Aktiv' : phase === 'uncertain' ? 'Unklar' : 'Anfrage' : room.session ? 'Belegt' : '');
+    badge.hidden = !badge.textContent;
     const favorite = element('button', `icon${room.favorite ? ' starred' : ''}`, room.favorite ? '★' : '☆');
     favorite.dataset.name = room.name; favorite.dataset.action = 'favorite';
     favorite.setAttribute('aria-label', `${room.label}: Favorit ${room.favorite ? 'entfernen' : 'speichern'}`);
@@ -147,6 +207,7 @@ function render() {
       renameTarget = room.name;
       $('original-name').textContent = room.name;
       $('alias').value = room.label;
+      $('rename-error').hidden = true;
       $('rename-dialog').showModal();
       $('alias').focus(); $('alias').select();
     };
@@ -159,7 +220,17 @@ function render() {
 }
 async function poll() {
   const next = await call('snapshot');
-  if (next) { snapshot = next; render(); }
+  if (next) {
+    snapshot = next;
+    if (!settingsLoaded) {
+      settingsLoaded = true;
+      favoritesOnly = next.viewSettings?.favoritesOnly === true;
+      prefixFilter = next.viewSettings?.prefix ?? '*';
+      $('all').classList.toggle('selected', !favoritesOnly); $('all').setAttribute('aria-pressed', String(!favoritesOnly));
+      $('favorites').classList.toggle('selected', favoritesOnly); $('favorites').setAttribute('aria-pressed', String(favoritesOnly));
+    }
+    render();
+  }
 }
 $('search').addEventListener('input', () => { selectedName = undefined; render(); });
 $('search').addEventListener('keydown', event => {
@@ -180,16 +251,41 @@ function filter(favorites) {
   favoritesOnly = favorites; selectedName = undefined;
   $('all').classList.toggle('selected', !favorites); $('all').setAttribute('aria-pressed', String(!favorites));
   $('favorites').classList.toggle('selected', favorites); $('favorites').setAttribute('aria-pressed', String(favorites));
-  render(); $('search').focus();
+  render(); saveFilters(); $('search').focus();
 }
 $('all').onclick = () => filter(false);
 $('favorites').onclick = () => filter(true);
 $('refresh').onclick = () => command('refresh');
+$('reset-filters').onclick = () => { $('search').value = ''; prefixFilter = '*'; filter(false); };
 $('stop').onclick = () => command('stop');
+$('acknowledge-recovery').onclick = () => command('acknowledgeRecovery');
+$('recover').onclick = async () => { await command('recover'); await loadDiagnostics(); };
+$('check-update').onclick = () => command('checkUpdate');
+$('download').onclick = () => command('openDownload');
+$('update-notice').onclick = () => { $('about').open = true; $('download').focus(); };
+async function loadDiagnostics() {
+  const report = await call('diagnostics');
+  $('diagnostics').value = typeof report === 'string' ? report : '';
+  return typeof report === 'string';
+}
+$('help').addEventListener('toggle', () => { if ($('help').open) void loadDiagnostics(); });
+$('copy-diagnostics').onclick = async () => {
+  if (!await loadDiagnostics()) { $('copy-status').textContent = 'Diagnosebericht konnte nicht geladen werden. Bitte erneut versuchen.'; return; }
+  $('diagnostic-details').open = true;
+  $('diagnostics').focus(); $('diagnostics').select();
+  let copied = false;
+  try { copied = document.execCommand('copy'); } catch {}
+  $('copy-status').textContent = copied ? 'Diagnosebericht kopiert.' : 'Der Bericht ist markiert. Kopiere ihn mit Strg+C (macOS: ⌘C).';
+};
 $('cancel-rename').onclick = () => $('rename-dialog').close();
 $('rename-form').onsubmit = async event => {
   event.preventDefault();
-  await command('preference', { name:renameTarget, alias:$('alias').value });
+  const saved = await command('preference', { name:renameTarget, alias:$('alias').value });
+  if (saved == null) {
+    $('rename-error').textContent = commandError || 'Der Raumname konnte nicht gespeichert werden. Bitte erneut versuchen.';
+    $('rename-error').hidden = false;
+    return;
+  }
   $('rename-dialog').close(); $('search').focus();
 };
 void poll();

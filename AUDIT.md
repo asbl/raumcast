@@ -1,3 +1,39 @@
+# Audit Raumcast — 21.11.2026
+
+Geprüfter Umfang: sämtliche Änderungen im Arbeitsstand seit Release 0.1.4, einschließlich Diagnose/Wiederherstellung, Empfängerprüfung, gespeicherter Filter, zuletzt verwendeter Räume, Updateprüfung und der neuen Start-/Instanzsteuerung. Die Prüfung umfasste Quellcode, Fehler- und Ereignisreihenfolgen, Dateierhalt sowie Tests mit echten Browser- und Kindprozessen. Es wurden keine realen Cast-Empfänger angesprochen.
+
+## Start und Einstellungen
+
+- Die getrennte PID-Prüfung mit anschließendem Schreiben war keine atomare Sperre und konnte fremde beziehungsweise wiederverwendete PIDs nicht sicher zuordnen. Sie wurde durch einen exklusiv gebundenen Loopback-Anschluss mit Profilabgleich ersetzt. PID-Dateien lösen keine Signale mehr aus. Sechs gleichzeitige Kaltstarts ergeben genau einen Eigentümer; ein getöteter Eigentümer hinterlässt keine Sperre.
+- Beschädigte Raum- und Filterdateien verhinderten die Bedienoberfläche und damit den Zugriff auf die Diagnose. Beide Dateien werden jetzt vor dem Weiterarbeiten unverändert unter eindeutigen Namen gesichert. Ein Hinweis nennt Standardwerte und Sicherungspfad; der Diagnosebericht behält die Information auch nach dem Ausblenden des Hinweises. Ungültige Raumdaten werden nicht teilweise importiert. Lese- oder Sicherungsfehler bleiben Startfehler, damit keine Originaldaten überschrieben werden.
+- Ein Zweitstart aktiviert das bestehende Fenster und stellt es aus dem minimierten Zustand wieder her. Aktivierungen während des Starts werden vorgemerkt. Windows verwendet denselben lokalen Kanal und versucht, Chrome die Vordergrundberechtigung zu übergeben.
+
+## Zusätzlich gefundene und korrigierte Fehler
+
+| Befund | Korrektur und Regression |
+| --- | --- |
+| P1: Discovery während einer laufenden Diagnose konnte den Cache leeren; anschließend setzte die zurückkehrende Diagnose ihr altes Ergebnis wieder ein. | Eine Revisionskennung verhindert das Wiederverwenden eines inzwischen verworfenen Ergebnisses. Das Zeitfenster beginnt vor der Diagnose. Der neue Regressionstest schlug vor der Korrektur fehl und besteht danach. |
+| P2: Startfehler, Browserabbruch und Rendererfehler konnten die Instanzsteuerung beziehungsweise Ressourcen behalten. Mehrere Beendigungsaufrufe warteten nicht auf dieselbe Bereinigung. | Frühe Fehler und Fenster-/Browserereignisse lösen dieselbe, gemeinsam abgewartete Bereinigung aus. Browserabbruch, simulierter Rendererfehler und fehlender Browser werden mit anschließendem erfolgreichem Neustart geprüft. |
+| P2: Das zunächst implementierte Ausweichen auf einen anderen Steueranschluss hätte nach dem Schließen eines kollidierenden Profils zwei Eigentümer erlaubt. | Bei einer Kollision wird der Start abgelehnt. Ein gezielt erzeugter Kollisionsfall ist durch einen Regressionstest abgesichert. Es gibt keinen Wechsel auf einen zweiten Anschluss. |
+| P2: Ein fehlgeschlagener Alias-Speichervorgang schloss den Dialog und verlor den Entwurf. | Dialog und Eingabe bleiben erhalten; die Fehlermeldung erscheint innerhalb des modalen Dialogs. Browserprüfung mit Schreibfehler und erfolgreicher Wiederholung. |
+| P2: Ein fehlgeschlagener Filter-Speichervorgang wurde durch einen anderen Befehl aus der Fehleranzeige verdrängt. | Der Filterfehler bleibt bis zum erfolgreichen Speichern sichtbar. Browserprüfung führt zwischen Fehler und Wiederholung eine unabhängige Updateprüfung aus. |
+| P2: Nach einem fehlgeschlagenen Diagnoseabruf konnte ein alter Bericht als vermeintlich neuer Bericht kopiert werden. | Der alte Text wird geleert, der Kopiervorgang abgebrochen und der Fehler gemeldet. Browserprüfung mit zuvor geladenem Bericht und anschließendem Abruffehler. |
+| P3: Ein fehlgeschlagener Downloadaufruf ließ seinen neu geöffneten Browser-Tab zurück. | Der Tab wird bei Navigationsfehlern geschlossen. Browserprüfung mit abgebrochener Netzwerkanfrage. |
+| P3: Unzulässig große Versionsbestandteile wurden als Zahlen akzeptiert und konnten beim Vergleich gerundet werden. | Nur sichere Ganzzahlen werden akzeptiert. Der ergänzte Regressionstest schlug vor der Korrektur fehl und besteht danach. |
+
+## Validierung und Grenzen
+
+- TypeScript-Prüfung, Build und 66 Anwendungstests.
+- Erweiterte Chromium-UI-Prüfung einschließlich fehlgeschlagener Speicherung, Diagnoseabruf, Download und erfolgreicher Wiederholung.
+- Startprüfung mit Dateisicherung, Diagnosehinweis, Zweitstart eines minimierten Fensters, simuliertem Rendererfehler, echtem Browserprozess-Abbruch, fehlgeschlagenem Browserstart und Neustart.
+- Bestehende Audit-Regressionsprüfung mit Browser.
+
+Die lokalen Browserprüfungen liefen unter Linux. Die CI wurde um die Startprüfung unter Linux und Windows ergänzt; die Windows-Vordergrundaktivierung wurde hier nicht auf einem Windows-Rechner geprüft. Der Rendererfehler wird im Test als Puppeteer-Fehlerereignis simuliert; ein erzwungener nativer `Page.crash` ließ sich in diesem lokalen Chromium nicht zuverlässig abschließen. Echte AirServer-Übertragung, WLAN-Unterbrechungen und macOS-Fensterverhalten bleiben praktisch zu prüfen. Ein belegter oder nicht antwortender Steueranschluss führt bewusst zu einer Fehlermeldung. Kann eine beschädigte Datei nicht sicher gesichert werden, wird der Start abgebrochen.
+
+Ein UI-Abschlusslauf blieb bei der ersten Suchergebnis-Erwartung ohne Treffer; der damalige Eingabewert war nicht protokolliert. Die Prüfung kontrolliert und protokolliert den Eingabewert jetzt zusätzlich. Der anschließende vollständige Lauf bestand. Die Ursache dieses einzelnen Testfehlers ist nicht abschließend geklärt; daraus wird kein bestätigter Produktfehler abgeleitet.
+
+Die folgenden Abschnitte dokumentieren den historischen Audit vom 30.10.2026.
+
 # Audit Raumcast — 30.10.2026
 
 Aktueller Stand: Alle vier Auditbefunde sind behoben. Der folgende Bericht dokumentiert den ursprünglichen Auditstand; die unten beschriebenen ursprünglichen Fehler sind durch Regressionstests abgesichert.

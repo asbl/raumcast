@@ -45,9 +45,11 @@ Nach einem Umzug des Projektordners den Startmenü-Eintrag neu anlegen:
 npm run install:desktop
 ```
 
-Nur eine echte Raumcast-Instanz gleichzeitig öffnen: Das eigene Browserprofil kann jeweils nur von einem Browserprozess verwendet werden. Dein normaler Browser kann parallel geöffnet bleiben. Zum Beenden das Raumcast-Fenster schließen; dadurch wird auch seine Browserinstanz und damit deren Übertragung beendet.
+Pro Datenverzeichnis läuft eine Raumcast-Instanz. Ein weiterer Start aktiviert das vorhandene Fenster und stellt es bei Bedarf aus dem minimierten Zustand wieder her, auch unter Windows. Während des Starts wird die Aktivierungsanfrage vorgemerkt. Dein normaler Browser kann parallel geöffnet bleiben. Zum Beenden das Raumcast-Fenster schließen; dadurch wird auch seine Browserinstanz und damit deren Übertragung beendet. Vor einem Programmupdate die bisherige Version schließen.
 
 ## Bedienung
+
+Im Normalzustand stehen Suche, Filter und Raumliste im Vordergrund. Der Sitzungsstatus erscheint beim Verbinden und während einer Übertragung. Hilfe, Diagnosebericht und Versionsdetails lassen sich unterhalb der Liste aufklappen. Ohne Suchtreffer lassen sich alle Filter mit einem Klick zurücksetzen.
 
 - Raumnummer oder Gerätename eingeben; Pfeiltasten wählen einen Eintrag, Enter verbindet.
 - Unter „Bereich“ nach dem Raumkürzel filtern, etwa G für G01 oder E für E01. Die Kürzel stammen aus den Originalnamen und bleiben beim Umbenennen erhalten. Bereich, Textsuche und Favoriten sind kombinierbar; „Alle Bereiche“ setzt den Bereichsfilter zurück.
@@ -55,7 +57,8 @@ Nur eine echte Raumcast-Instanz gleichzeitig öffnen: Das eigene Browserprofil k
 - Räume ohne Buchstabenkürzel gehören zu A: 208 wird als A208 angezeigt, ebenso die bisher als 208 dargestellten Empfänger mit technischem R-Präfix. Die Suche findet sowohl A208 als auch 208, auch bei einem eigenen Anzeigenamen.
 - Alternativ einen Raum direkt anklicken.
 - Der Stern speichert einen Favoriten; der Stift ändert den Anzeigenamen. Ein leerer Anzeigename stellt den automatisch erkannten Namen wieder her.
-- `CWSR208PCWB` wird automatisch zu „Raum A208“, `CWSD32PCWB` zu „Raum D32“. Der Originalname bleibt sichtbar.
+- Bereich und Favoritenfilter bleiben nach einem Neustart erhalten. „Zuletzt verwendet“ zeigt bis zu drei tatsächlich verwendete Empfänger unabhängig vom Filter. Nicht verfügbare, belegte und mehrdeutige Ziele bleiben für neue Verbindungen gesperrt. Es wird nie automatisch verbunden.
+- `CWSR208PCWB` wird automatisch zu „Raum A208“, `CWSD32PCWB` zu „Raum D32“. Der Originalname steht im Tooltip und im Umbenennen-Dialog. Bei eigenen Anzeigenamen bleibt der Raumcode sichtbar.
 - Die Empfängernamen dürfen auf `PCWB` oder `CWB` enden. Beispielsweise erscheint `CWSD12CWB` als „Raum D12“ im Bereich D und ist über `12`, `D12` oder den Originalnamen auffindbar.
 - Raum auswählen, dann den Bildschirm im gewohnten Systemdialog freigeben. Der Dialog wird nicht automatisch bestätigt.
 - Während der Übertragung kannst du das Fenster minimieren. „Übertragung beenden“ beendet die eigene Sitzung.
@@ -65,6 +68,14 @@ Nur eine echte Raumcast-Instanz gleichzeitig öffnen: Das eigene Browserprofil k
 - Gespeicherte Räume bleiben auch ohne Netzwerk sichtbar, sind dann aber nicht auswählbar.
 - Bereits belegte oder namensgleiche Empfänger werden für neue Verbindungen gesperrt. Die Cast-Schnittstelle adressiert Empfänger beim Starten über ihren Namen.
 
+### Verbindungsprobleme und Updates
+
+Unter „Hilfe“ unterhalb der Raumliste stehen zum aktuellen Zustand passende nächste Schritte und ein kopierbarer Diagnosebericht. Er enthält App-, Node- und Browserversion, Grafikmodus, Sitzungsstatus, Empfängerzahlen, Zeitpunkt der letzten Empfängermeldung, den letzten Verbindungsfehler sowie Programm- und Protokollpfad. Der Bericht wird lokal erstellt; du entscheidest, ob du ihn weitergibst. Falls direktes Kopieren nicht möglich ist, bleibt der Text für Strg+C beziehungsweise ⌘C markiert.
+
+„Verbindung neu initialisieren“ startet die Cast-Suche neu. Bei einer eigenen Sitzung heißt die Aktion „Übertragung beenden und neu suchen“ und beendet zuerst diese Sitzung. Schlägt das Beenden fehl, bleiben Ziel und Stop-Möglichkeit erhalten; die Suche wird dann nicht zurückgesetzt. Einen offenen Bildschirmdialog zuerst bestätigen oder abbrechen.
+
+Unter „Version“ stehen Versionsnummer und Updateprüfung. Die App prüft bei jedem normalen Start einmal im Hintergrund über die öffentliche GitHub-API auf eine neue stabile Version. „Updates prüfen“ wiederholt die Prüfung. Ein verfügbares Update wird auch bei zugeklappten Versionsdetails angezeigt. GitHub erhält dabei eine übliche HTTPS-Anfrage mit der Raumcast-Version, keine Diagnoseberichte oder Raumdaten. Ohne Internet bleibt die Bildschirmfunktion nutzbar. Demo und `--smoke` prüfen nicht automatisch auf Updates. „Download öffnen“ öffnet die offizielle Release-Seite in einem zusätzlichen Browser-Tab; Installation und Neustart erfolgen manuell.
+
 ## Demo und Tests
 
 ```sh
@@ -72,6 +83,7 @@ npm run demo
 npm run check
 npm test
 npm run test:ui
+npm run test:startup
 npm start -- --smoke
 ```
 
@@ -121,7 +133,8 @@ Standardverzeichnis für Browserprofil und `rooms.json`:
 | Windows | `%LOCALAPPDATA%\Raumcast` |
 | macOS | `~/Library/Application Support/Raumcast` |
 
-Mit `RAUMCAST_DATA_DIR` kann ein anderes Datenverzeichnis gewählt werden. Zum manuellen Bearbeiten von `rooms.json` Raumcast vorher schließen. Ein beschädigtes Einstellungsformat führt zu einer Fehlermeldung, damit keine bestehenden Daten stillschweigend überschrieben werden.
+Mit `RAUMCAST_DATA_DIR` kann ein anderes Datenverzeichnis gewählt werden. Zum manuellen Bearbeiten von `rooms.json` Raumcast vorher schließen. Beschädigte JSON-Dateien oder ungültige Einstellungen in `rooms.json` und `view-settings.json` werden unverändert unter einem eindeutigen Namen nach dem Muster `rooms.json.damaged-<Zeit>-<ID>.bak` gesichert. Raumcast startet für die betroffene Datei mit Standardwerten und zeigt den Sicherungspfad als Hinweis sowie im Diagnosebericht an. „Verstanden“ blendet nur den Hinweis aus. Die Sicherung bleibt erhalten und kann bei geschlossenem Raumcast geprüft und zurückkopiert werden. Kann die Datei nicht gelesen oder gesichert werden, bricht der Start mit einem Fehler ab, statt sie zu überschreiben.
+Die Filter stehen separat in `view-settings.json`; bestehende `rooms.json`-Dateien benötigen keine Migration.
 
 ## Architektur und Grenzen
 
@@ -129,7 +142,11 @@ Mit `RAUMCAST_DATA_DIR` kann ein anderes Datenverzeichnis gewählt werden. Zum m
 
 Die Steuerung verwendet eine Prozess-Pipe, keinen offenen Debugging-Port. Die Oberfläche wird direkt aus lokalen Dateien geladen. Im Audiomodus läuft zusätzlich ein temporärer HTTP-Endpunkt mit zufälligem URL-Pfad. Er liefert den Musikstream direkt an den ausgewählten Receiver. Der Zugriff ist auf dessen IP-Adresse und den eigenen Rechner beschränkt. Die Bedienseite wird über Loopback geöffnet, und die privilegierten Lautstärkebefehle sind auf genau diese Seite begrenzt. Der Endpunkt wird beim Beenden geschlossen. Das Browserprofil ist vom normalen Browser getrennt. Puppeteers übliche Startargumente würden MediaRouter deaktivieren; daher verwenden wir bewusst eigene minimale Startargumente.
 
-Die CDP-Cast-Schnittstelle ist experimentell. Eine vom Empfänger gemeldete Sitzung beweist nicht, dass am Display ein korrektes Bild erscheint. Die Oberfläche sagt deshalb „Sitzung gemeldet“. Die Anwendung kann fremde Sitzungen nicht zuverlässig einem Besitzer zuordnen; sie startet keine Verbindung zu bereits als belegt gemeldeten Empfängern und bietet Stoppen nur für selbst angefragte Ziele an.
+Die Instanzsteuerung belegt exklusiv einen aus dem Datenverzeichnis abgeleiteten TCP-Anschluss auf `127.0.0.1`. Sie akzeptiert ausschließlich Protokollabfrage und Fensteraktivierung für das passende Profil, keine Cast- oder Dateibefehle. Es werden keine Prozesssignale an PIDs aus Dateien gesendet. Das Betriebssystem gibt den Anschluss auch nach einem Prozessabbruch frei. Bei einer Anschlusskollision oder einer nicht antwortenden Instanz wird der Start mit einer Fehlermeldung beendet; es wird keine zweite Instanz für dasselbe Profil geöffnet. Beim Absturz des Browsers oder des Hauptfenster-Renderers wird Raumcast einschließlich Instanzsteuerung beendet. Unter Windows versucht der Zweitstart, Chrome die Vordergrundberechtigung zu übergeben; die Fensteraktivierung unterliegt den Regeln des Betriebssystems.
+
+`npm run test:startup` prüft mit echten Browser- und Kindprozessen beschädigte Dateien, Diagnosehinweise, einen Zweitstart mit minimiertem Fenster, einen simulierten Rendererfehler, einen echten Browserabbruch, einen fehlgeschlagenen Browserstart und den anschließenden Neustart. Die CI führt diesen Test unter Linux und Windows aus. Gleichzeitige Kaltstarts und Anschlusskollisionen sind zusätzlich in `npm test` abgedeckt.
+
+Die CDP-Cast-Schnittstelle ist experimentell. Eine vom Empfänger gemeldete Sitzung beweist nicht, dass am Display ein korrektes Bild erscheint. Die Oberfläche nennt deshalb das Ziel und fordert dazu auf, das Bild im Raum zu prüfen. Die Anwendung kann fremde Sitzungen nicht zuverlässig einem Besitzer zuordnen; sie startet keine Verbindung zu bereits als belegt gemeldeten Empfängern und bietet Stoppen nur für selbst angefragte Ziele an.
 
 Lokal auf Manjaro/GNOME/Wayland geprüft: Browserstart, `Cast.enable`, TypeScript-Prüfung, Controller-Tests und UI-Test. Die echte AirServer-Übertragung, Systemdialog-Abbruch und Raumwechsel im Schulnetz bleiben praktisch zu prüfen.
 
@@ -158,6 +175,8 @@ Vor einem Start prüft Raumcast deshalb die Desktop-Quellen in Chromiums
 erhalten. Sind die Diagnosedaten nicht verfügbar oder nicht eindeutig, wird der
 Start ebenfalls abgelehnt. Die Shield kann weiterhin verwendet werden, sofern
 Chromium sie als Desktop-Empfänger meldet.
+
+Moduswahl und anschließende Fähigkeitsprüfung teilen innerhalb eines Startversuchs ein höchstens 1,5 Sekunden altes Diagnoseergebnis. Es wird nur einmal wiederverwendet und bei einer neuen Empfängermeldung oder Neuinitialisierung verworfen. Identität und Belegung werden weiterhin unmittelbar vor dem Start geprüft. Ein unbekanntes Browserdiagnoseformat führt zu einer verständlichen Fehlermeldung und verhindert den Start.
 
 Hintergrund: Der [Chromium-Cast-Handler](https://chromium.googlesource.com/chromium/src/+/main/chrome/browser/devtools/protocol/cast_handler.cc)
 greift beim Desktop-Start ohne Nullprüfung auf die passende Quelle zu. Das

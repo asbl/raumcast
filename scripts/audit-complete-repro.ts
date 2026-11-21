@@ -19,12 +19,13 @@ if(process.argv.includes('--browser')) {
   };
   const {launch}=await import('../src/main.js');
   const app=await launch();
+  // Timer polling also works when app-window animation callbacks are suspended.
   try {
     assert.ok(app.browser.process()!.spawnargs.includes(`--user-data-dir=${join(temp,'demo','browser-profile')}`));
-    await app.page.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Cast ist nicht bereit');
+    await app.page.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Verbindung nicht bereit', {polling:100});
     assert.equal(await app.page.$eval('#refresh',e=>(e as HTMLButtonElement).disabled),false);
-    await app.page.click('#refresh');
-    await app.page.waitForFunction(()=>document.querySelector('#connection')?.textContent==='Zur Bildschirmübertragung bereit');
+    await app.page.$eval('#refresh', element => (element as HTMLButtonElement).click());
+    await app.page.waitForFunction(()=>document.querySelector('#session')?.getAttribute('data-ready')==='true', {polling:100});
     assert.equal(app.initializationError,'');
     assert.equal(await app.page.$eval('#error',e=>(e as HTMLElement).hidden),true);
     console.log('A5/A6 behoben: dauerhaftes Profil und Wiederholung über die Oberfläche bestätigt.');
@@ -40,18 +41,18 @@ if(process.argv.includes('--browser')) {
         return {ok:true,data:{level,muted:false,controlType:'master'}};
       });
       await page.goto(ui.url,{waitUntil:'domcontentloaded'});
-      await page.waitForFunction(()=>!(document.querySelector('#receiver-volume') as HTMLInputElement).disabled);
+      await page.waitForFunction(()=>!(document.querySelector('#receiver-volume') as HTMLInputElement).disabled, {polling:100});
       await page.focus('#receiver-volume');
       const before=reads;level=0.10;
-      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='10 %');
+      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='10 %', {polling:100});
       assert.ok(reads>before);
-      await page.click('#volume-up');
-      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='10,5 %');
+      await page.$eval('#volume-up', element => (element as HTMLButtonElement).click());
+      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='10,5 %', {polling:100});
       assert.equal(level,0.105);
       // Even a change made before the next poll must use the fresh device value.
       level=0.05;
-      await page.click('#volume-up');
-      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='5,5 %');
+      await page.$eval('#volume-up', element => (element as HTMLButtonElement).click());
+      await page.waitForFunction(()=>document.querySelector('#volume-value')?.textContent==='5,5 %', {polling:100});
       assert.equal(level,0.055);
       console.log('A7 behoben: Fokus blockiert keine Statusabfragen; +0,5 basiert auf dem aktuellen Gerätewert.');
     } finally {await page.close();ui.close();}

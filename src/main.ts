@@ -1,6 +1,6 @@
 import puppeteer, { type Browser, type Page } from 'puppeteer-core';
 import { mkdir } from 'node:fs/promises';
-import { appendFileSync, statSync, renameSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { appendFileSync, statSync, renameSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CastController } from './controller.js';
@@ -9,42 +9,48 @@ import { findBrowser, browserGraphicsArgs } from './browser.js';
 import { ChromiumCastTransport } from './cast-support.js';
 import { DemoTransport } from './demo.js';
 import { sameLocalFile } from './local-ui.js';
+import { ViewSettingsStore } from './view-settings.js';
+import { UpdateChecker, releasesUrl } from './updates.js';
+import { AppInstance } from './instance.js';
 
 const demo = process.argv.includes('--demo');
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 let browser: Browser | undefined;
 let controller: CastController | undefined;
 let activePage: Page | undefined;
-let lockPath: string | undefined;
+let instance: AppInstance | undefined;
+let activationRequested = false;
 let closing = false;
+let shutdownTask: Promise<void> | undefined;
+let viewSettings: ViewSettingsStore | undefined;
 export class AlreadyRunningError extends Error {}
-// A running instance that shares the browser profile would otherwise silently absorb the
-// new launch into an un-wired window (Chromium's single-instance forwarding), hanging the
-// new process instead of failing. Detect it up front via a PID lock and bail out early.
-function readLivePid(path: string): number | undefined {
-  let pid: number;
-  try { pid = Number(readFileSync(path, 'utf8').trim()); }
-  catch { return undefined; }
-  if (!Number.isInteger(pid)) return undefined;
-  try { process.kill(pid, 0); return pid; }
-  catch { return undefined; }
+async function activateWindow() {
+  if (closing) throw new Error('Raumcast wird beendet. Bitte danach erneut starten.');
+  activationRequested = true;
+  if (!activePage || activePage.isClosed()) return;
+  const session = await activePage.createCDPSession();
+  try {
+    const { windowId, bounds } = await session.send('Browser.getWindowForTarget');
+    if (bounds.windowState === 'minimized') await session.send('Browser.setWindowBounds', { windowId, bounds:{ windowState:'normal' } });
+    await activePage.bringToFront();
+    activationRequested = false;
+  } finally { await session.detach().catch(() => {}); }
 }
-async function shutdown() {
-  if (closing) return;
+function shutdown(): Promise<void> {
+  return shutdownTask ??= performShutdown();
+}
+async function performShutdown() {
   closing = true;
   controller?.dispose();
-  try { await controller?.store.flush(); }
+  try { await Promise.all([controller?.store.flush(), viewSettings?.flush()]); }
   catch(error) { console.error(`Einstellungen konnten nicht gespeichert werden: ${String(error)}`); process.exitCode = 1; }
   finally {
     await browser?.close().catch(() => {});
-    if (lockPath) try { unlinkSync(lockPath); } catch {}
+    await instance?.close();
   }
 }
-// Asks an already-running instance to raise its window; Windows cannot deliver SIGUSR1
-// between processes, so there the user just sees the "already running" message instead.
-process.on('SIGUSR1', () => { void activePage?.bringToFront().catch(() => {}); });
 
-export async function launch() {
+async function launchApplication() {
   const data = join(dataDirectory(), ...(demo ? ['demo'] : []));
   await mkdir(data, { recursive: true, mode: 0o700 });
   const logPath = join(data, 'raumcast.log');
@@ -53,17 +59,23 @@ export async function launch() {
     try { appendFileSync(logPath, `${new Date().toISOString()} ${message}\n`, { mode: 0o600 }); } catch {}
   };
   log(`Start: Programmordner ${root}; Demo ${demo}`);
-  const pidPath = join(data, 'raumcast.pid');
-  const existing = readLivePid(pidPath);
-  if (existing !== undefined) {
-    log(`Bereits laufende Instanz erkannt (PID ${existing}); Start abgebrochen.`);
-    try { process.kill(existing, 'SIGUSR1'); } catch {}
-    throw new AlreadyRunningError(`Raumcast läuft bereits (PID ${existing}). Das vorhandene Fenster wurde in den Vordergrund geholt.`);
+  instance = new AppInstance(activateWindow, () => browser?.process()?.pid);
+  const ownership = await instance.acquire(data);
+  if (closing) { await instance.close(); throw new Error('Raumcast wurde während des Starts beendet.'); }
+  if (ownership === 'activated') {
+    log('Vorhandene Instanz aktiviert; zweiter Start beendet.');
+    throw new AlreadyRunningError('Raumcast läuft bereits. Das vorhandene Fenster wurde aktiviert oder wird nach dem Start angezeigt.');
   }
-  writeFileSync(pidPath, String(process.pid), { mode: 0o600 });
-  lockPath = pidPath;
   const store = new PreferenceStore(join(data, 'rooms.json'));
   await store.load();
+  viewSettings = new ViewSettingsStore(join(data, 'view-settings.json'));
+  await viewSettings.load();
+  const settings = viewSettings;
+  const recoveries = [store.recovery, settings.recovery].filter(item => item !== undefined);
+  for (const recovery of recoveries) log(recovery.message);
+  let recoveryAcknowledged = false;
+  const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version:string }).version;
+  const updates = new UpdateChecker(version);
   const url = pathToFileURL(join(root, 'ui', 'index.html')).href;
   const graphicsArgs = browserGraphicsArgs();
   log(`Plattform: ${process.platform}; Grafik: ${graphicsArgs.length ? 'Software (--disable-gpu)' : 'Browserstandard'}`);
@@ -81,8 +93,13 @@ export async function launch() {
     args: ['--remote-debugging-pipe', '--no-first-run', '--no-default-browser-check', ...graphicsArgs,
       '--window-size=620,780', `--user-data-dir=${join(data, 'browser-profile')}`, '--class=Raumcast', `--app=${url}`],
   });
-  log(`Browser: ${await browser.version()}`);
-  browser.on('disconnected', () => { log(closing ? 'Browser regulär beendet.' : 'Browserverbindung unerwartet beendet.'); controller?.dispose(); });
+  if (closing) { await browser.close(); throw new Error('Raumcast wurde während des Starts beendet.'); }
+  const browserVersion = await browser.version();
+  log(`Raumcast: ${version}; Browser: ${browserVersion}`);
+  browser.on('disconnected', () => {
+    log(closing ? 'Browser regulär beendet.' : 'Browserverbindung unerwartet beendet.');
+    void shutdown();
+  });
   // Wait for the app window itself; an initial/other tab can otherwise receive
   // the bridge while the visible app window remains uninitialized.
   const target = await browser.waitForTarget(t => t.type() === 'page' && sameLocalFile(t.url(), url), { timeout: 30_000 });
@@ -90,6 +107,7 @@ export async function launch() {
   const page = await target.page();
   if (!page) throw new Error('Das Raumcast-Fenster konnte nicht geöffnet werden.');
   activePage = page;
+  page.once('close', () => { void shutdown(); });
   // The command bridge is restricted to our local UI.
   await page.setRequestInterception(true);
   page.on('request', request => {
@@ -102,7 +120,7 @@ export async function launch() {
   const cdp = await page.createCDPSession();
   controller = new CastController(demo ? new DemoTransport() : new ChromiumCastTransport(browser, cdp, log), store);
   const cast = controller;
-  page.on('error', error => log(`Oberfläche abgestürzt: ${error.message}`));
+  page.on('error', error => { log(`Oberfläche abgestürzt: ${error.message}`); void shutdown(); });
   page.on('pageerror', error => log(`Oberflächenfehler: ${String(error)}`));
   let initializationError = '';
   let initializing = true;
@@ -111,15 +129,47 @@ export async function launch() {
     try {
       if (!sameLocalFile(page.url(), url)) throw new Error('Unzulässiger Seitenaufruf.');
       const p = payload as { name?: string; alias?: string; favorite?: boolean; mode?: unknown } | undefined;
-      if (action === 'snapshot') return { ok: true, data: { ...cast.snapshot(), demo, systemAudioSupported: demo || process.platform === 'linux', initializing, initializationError } };
-      if (action === 'refresh') {
+      if (closing) throw new Error('Raumcast wird beendet.');
+      if (action === 'snapshot') return { ok: true, data: { ...cast.snapshot(), demo, systemAudioSupported: demo || process.platform === 'linux', initializing, initializationError, version, viewSettings:settings.value, update:updates.status, recoveries:recoveryAcknowledged ? [] : recoveries } };
+      if (action === 'diagnostics') {
+        const state = cast.snapshot();
+        return { ok:true, data:[
+          `Raumcast ${version}${demo ? ' DEMO' : ''} · ${new Date().toISOString()}`,
+          `System: ${process.platform}/${process.arch}; Node ${process.version}`,
+          `Browser: ${browserVersion}; Grafik: ${graphicsArgs.length ? 'Software' : 'Browserstandard'}`,
+          `Cast: ${initializing ? 'wird vorbereitet' : initializationError ? 'nicht bereit' : 'bereit'}`,
+          `Sitzung: ${state.phase}; Modus: ${state.mode}; beschäftigt: ${state.busy}`,
+          `Eigenes Ziel: ${state.owned || 'keines'}`,
+          `Empfänger: ${state.rooms.filter(room => room.available).length} verfügbar; ${state.rooms.filter(room => room.ambiguous).length} mehrdeutig; ${state.rooms.filter(room => room.session).length} mit Sitzung`,
+          `Letzte Empfängermeldung: ${cast.lastDiscoveryAt ? new Date(cast.lastDiscoveryAt).toISOString() : 'noch keine'}`,
+          `Fehler: ${initializationError || state.issue || 'keiner'}`,
+          `Updateprüfung: ${updates.status.state}${updates.status.latest ? '; neueste Version ' + updates.status.latest : ''}`,
+          `Programmordner: ${root}`, `Protokoll: ${logPath}`,
+          ...recoveries.map(recovery => recovery.message),
+        ].join('\n') };
+      }
+      if (action === 'acknowledgeRecovery') recoveryAcknowledged = true;
+      else if (action === 'viewSettings') await settings.update(payload);
+      else if (action === 'checkUpdate') await updates.check();
+      else if (action === 'openDownload') {
+        const downloadPage = await browser!.newPage();
+        try {
+          await downloadPage.goto(releasesUrl, { waitUntil:'domcontentloaded', timeout:15_000 });
+          await downloadPage.bringToFront();
+        } catch (error) { await downloadPage.close().catch(() => {}); throw error; }
+      }
+      else if (action === 'refresh' || action === 'recover') {
         if (initializing) throw new Error('Cast wird noch initialisiert.');
-        if (cast.busy || cast.owned) throw new Error('Bitte zuerst die laufende Übertragung beenden.');
+        if (cast.busy || (action === 'refresh' && cast.owned)) throw new Error('Bitte zuerst die laufende Übertragung beenden.');
         initializing = true;
         try {
-          if (initializationError) await cast.initialize(); else await cast.refresh();
+          if (action === 'recover') await cast.recover();
+          else if (initializationError) await cast.initialize(); else await cast.refresh();
           initializationError = '';
-        } catch(error) { initializationError = initializationMessage(error); throw error; }
+        } catch(error) {
+          if (!cast.owned) initializationError = initializationMessage(error);
+          throw error;
+        }
         finally { initializing = false; }
       }
       else if (action === 'stop') await cast.stop();
@@ -144,9 +194,10 @@ export async function launch() {
   log('Programmsteuerung bereitgestellt; Oberfläche wird geladen.');
   await page.goto(url);
   try {
-    await page.waitForFunction(() => typeof (window as any).raumcast === 'function' && !!document.querySelector('#search') && !!document.querySelector('#count')?.textContent, { timeout: 15_000 });
+    await page.waitForFunction(() => typeof (window as any).raumcast === 'function' && !!document.querySelector('#search') && !!document.querySelector('#count')?.textContent, { timeout: 15_000, polling:100 });
     log('Oberfläche mit Programmsteuerung verbunden.');
     await page.bringToFront();
+    if (activationRequested) await activateWindow();
   } catch (error) {
     log(`Oberfläche nicht startbereit: ${String(error)}`);
     throw new Error(`Raumcast-Oberfläche konnte nicht geladen werden. Details: ${logPath}`);
@@ -156,17 +207,21 @@ export async function launch() {
     initializationError = initializationMessage(error);
     console.error(initializationError);
   } finally { initializing = false; }
+  if (!demo && !process.argv.includes('--smoke')) void updates.check();
   console.log(`Raumcast${demo ? ' DEMO' : ''} gestartet. Profil und Räume: ${data}`);
   if (process.argv.includes('--smoke')) {
-    if (!initializationError) await page.waitForFunction(() => document.querySelector('#connection')?.textContent?.includes('bereit'));
+    if (!initializationError) await page.waitForFunction(() => document.querySelector('#session')?.getAttribute('data-ready') === 'true', { polling:100 });
     await mkdir(join(root, 'artifacts'), { recursive: true });
     await page.screenshot({ path: join(root, 'artifacts', demo ? 'demo.png' : 'live.png') });
     console.log(JSON.stringify({ browser: await browser.version(), ...cast.snapshot(), initializationError }, null, 2));
     if (initializationError) process.exitCode = 1;
     await shutdown();
   }
-  page.on('close', () => { void shutdown(); });
   return { browser, page, controller: cast, get initializationError() { return initializationError; }, shutdown };
+}
+export async function launch() {
+  try { return await launchApplication(); }
+  catch (error) { await shutdown(); throw error; }
 }
 for (const signal of ['SIGINT', 'SIGTERM'] as const) process.on(signal, () => { void shutdown(); });
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) launch().catch(async error => {

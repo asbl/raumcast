@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { EventEmitter } from 'node:events';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { CastController, roomLabel, roomPrefix, type Sink } from '../src/controller.js';
@@ -127,7 +127,10 @@ test('Favoriten, Alias und nicht verfügbare Räume bleiben nach Neustart erhalt
 test('beschädigte Einstellungen werden nicht stillschweigend überschrieben', async t => {
   const { store } = await fixture(t);
   await writeFile(store.filename, '{broken');
-  await assert.rejects(new PreferenceStore(store.filename).load());
+  const recovered = new PreferenceStore(store.filename); await recovered.load();
+  assert.ok(recovered.recovery);
+  assert.equal(await readFile(recovered.recovery.backup, 'utf8'), '{broken');
+  assert.deepEqual(Object.keys(recovered.value), []);
 });
 
 test('Discovery-Verlust behält das eigene Ziel und sendet weiterhin Stop', async t => {
@@ -322,4 +325,38 @@ test('fehlgeschlagene automatische Erkennung beendet keine bestehende Sitzung', 
   assert.equal(p.commands.length, count);
   assert.equal(c.owned, room.name);
   assert.equal(c.phase, 'active');
+});
+test('Wiederherstellung beendet zuerst die eigene Sitzung und initialisiert danach die Suche', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([room]); await c.start(room.name);
+  p.discover([{ ...room, session:'Desktop' }]);
+  assert.ok(c.lastDiscoveryAt);
+  await c.recover();
+  assert.deepEqual(p.commands.slice(-3).map(command => command.method), ['Cast.stopCasting', 'Cast.disable', 'Cast.enable']);
+  assert.equal(c.owned, null);
+  assert.equal(c.lastDiscoveryAt, null);
+});
+test('Fehlgeschlagener Stop bei Wiederherstellung behält das Ziel und setzt Discovery nicht zurück', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([room]); await c.start(room.name);
+  p.discover([{ ...room, session:'Desktop' }]);
+  p.fail = 'Cast.stopCasting';
+  await assert.rejects(c.recover());
+  assert.equal(c.owned, room.name);
+  assert.equal(c.phase, 'uncertain');
+  assert.equal(p.commands.some(command => command.method === 'Cast.disable'), false);
+  p.fail = ''; await c.recover(); assert.equal(c.owned, null);
+});
+test('Wiederherstellung blockiert offene Startbefehle und kann nach Initialisierungsfehler wiederholt werden', async t => {
+  const { controller:c, transport:p } = await fixture(t);
+  p.discover([room]); p.pause = 'Cast.startDesktopMirroring';
+  const start = c.start(room.name);
+  await assert.rejects(c.recover(), /Bildschirmdialog/);
+  assert.equal(p.commands.some(command => command.method === 'Cast.disable'), false);
+  p.release!(); await start;
+  p.pause = ''; p.fail = 'Cast.enable';
+  await assert.rejects(c.recover(), /Testabbruch/);
+  assert.equal(c.owned, null); assert.equal(c.busy, false);
+  p.fail = ''; await c.recover();
+  assert.equal(p.commands.at(-1)?.method, 'Cast.enable');
 });

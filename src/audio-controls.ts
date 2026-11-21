@@ -29,10 +29,10 @@ function render(value) {
   const fixed = value.controlType === 'fixed';
   volume.disabled = mute.disabled = quieter.disabled = louder.disabled = fixed;
   volume.max = fullRange ? '100' : '40';
-  range.textContent = fullRange ? 'Feinbereich 0–40 %' : 'Gesamten Bereich 0–100 % anzeigen';
+  range.textContent = fullRange ? 'Regelbereich 0–40 %' : 'Regelbereich 0–100 %';
   range.setAttribute('aria-pressed', String(fullRange));
   range.disabled = shown > 40 && fullRange;
-  range.title = range.disabled ? 'Für den Feinbereich zuerst die Lautstärke auf höchstens 40 % einstellen.' : '';
+  range.title = range.disabled ? 'Zuerst auf höchstens 40 % stellen.' : 'Regelbereich wechseln; Lautstärke bleibt unverändert.';
   const marks = fullRange ? [0,20,40,60,80,100] : [0,10,20,30,40];
   ticks.replaceChildren(...marks.map(mark => { const label = document.createElement('span'); label.textContent = mark; return label; }));
   preview(shown);
@@ -85,6 +85,7 @@ export const audioControlsCss = `
 * { box-sizing:border-box; }
 body { margin:0; padding:clamp(20px,5vw,56px); background:var(--bg); color:var(--text); }
 main { max-width:800px; margin:auto; }
+.visually-hidden { position:absolute; width:1px; height:1px; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 h1 { font-size:clamp(24px,4vw,32px); margin:0 0 12px; }
 p { color:var(--muted); line-height:1.6; }
 .volume-panel { margin-top:28px; padding:clamp(20px,4vw,36px); background:var(--card); border:1px solid var(--border); border-radius:18px; }

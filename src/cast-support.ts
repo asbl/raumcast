@@ -12,6 +12,17 @@ type RouterState = {
   available_sinks?: Record<string, unknown>;
   known_sinks?: Sink[];
 };
+export function validateRouterState(value: unknown): RouterState {
+  const data = value as RouterState | null;
+  const record = (item: unknown) => !!item && typeof item === 'object' && !Array.isArray(item);
+  if (!record(data) || !record(data?.available_sinks) ||
+      !Object.values(data!.available_sinks!).every(ids => Array.isArray(ids) && ids.every(id => typeof id === 'string')) ||
+      (data!.discovered_sinks !== undefined && (!record(data!.discovered_sinks) ||
+        !Object.values(data!.discovered_sinks).every(items => Array.isArray(items) && items.every(item => record(item) && typeof item.id === 'string' && typeof item.name === 'string'))))) {
+    throw new Error('Chromiums Empfängerdiagnose hat ein unbekanntes Format. Bitte Raumcast aktualisieren und die Verbindung erneut prüfen.');
+  }
+  return data!;
+}
 const sourceMatches = (source: string, mode: 'desktop' | 'tab') =>
   new RegExp(`^CAST:urn:x-org\\.chromium\\.media:source:${mode}(?:$|:)`).test(source);
 export function supportsDesktop(state: unknown, sink: Sink): boolean { return supportsMode(state, sink, 'desktop'); }
@@ -45,10 +56,13 @@ export class ChromiumCastTransport implements CastTransport {
   private audio?: { page: Page; direct: DirectCastAudio; stream: Awaited<ReturnType<typeof serveSystemAudio>>; name: string; requestId:number; suspended:boolean; volume: ReceiverVolumeControl };
   private disposed = false;
   private sinks: Sink[] = [];
+  private capabilitySnapshot?: { id:string; name:string; state:unknown; expires:number };
+  private discoveryRevision = 0;
   constructor(private browser: Browser, private cdp: CDPSession, private log: (message: string) => void = () => {}) {
-    cdp.on('Cast.sinksUpdated', event => { this.sinks = event.sinks; });
+    cdp.on('Cast.sinksUpdated', event => { this.sinks = event.sinks; this.discoveryRevision++; this.capabilitySnapshot = undefined; });
   }
   async send(method: string, params?: Record<string, unknown>): Promise<unknown> {
+    if (method === 'Cast.disable' || method === 'Cast.enable') { this.discoveryRevision++; this.capabilitySnapshot = undefined; }
     if (method === 'Raumcast.startSystemAudio' || method === 'Cast.startDesktopMirroring') this.log(`${method}: ${String(params?.sinkName)}`);
     if (method === 'Raumcast.startSystemAudio') {
       try { return await this.startSystemAudio(String(params?.sinkName), String(params?.sinkId), Number(params?.requestId)); }
@@ -70,7 +84,11 @@ export class ChromiumCastTransport implements CastTransport {
     return (this.cdp as unknown as CastTransport).on(event, listener);
   }
   async selectMode(sink: Sink) {
-    const mode = preferredMode(await this.readState(), sink);
+    this.capabilitySnapshot = undefined;
+    const revision = this.discoveryRevision, expires = Date.now() + 1500;
+    const state = await this.readState();
+    const mode = preferredMode(state, sink);
+    if (revision === this.discoveryRevision && expires > Date.now()) this.capabilitySnapshot = { id:sink.id, name:sink.name, state, expires };
     this.log(`Empfänger ${sink.name}: automatisch ${mode}`);
     return mode;
   }
@@ -80,7 +98,10 @@ export class ChromiumCastTransport implements CastTransport {
     await this.assertModeSupported(sink, 'tab');
   }
   private async assertModeSupported(sink: Sink, mode: 'desktop' | 'tab') {
-    if (!supportsMode(await this.readState(), sink, mode)) {
+    const cached = this.capabilitySnapshot;
+    this.capabilitySnapshot = undefined; // Only share selection and validation of one start.
+    const state = cached && cached.id === sink.id && cached.name === sink.name && cached.expires > Date.now() ? cached.state : await this.readState();
+    if (!supportsMode(state, sink, mode)) {
       throw new Error(mode === 'desktop' ? 'Dieser Empfänger unterstützt keine bestätigte Bildschirmübertragung. Bitte einen bildschirmfähigen Cast-Empfänger auswählen.' : 'Dieser Empfänger unterstützt keine bestätigte Audioübertragung aus einem Browser-Tab.');
     }
   }
@@ -92,14 +113,14 @@ export class ChromiumCastTransport implements CastTransport {
       // This changes only Raumcast's dedicated browser profile.
       if (page.url().startsWith('chrome://debug-webuis-disabled')) {
         await page.goto('chrome://chrome-urls/', { timeout: 5000 });
-        await page.waitForFunction(() => document.querySelector('chrome-urls-app')?.shadowRoot?.querySelector('cr-button'), { timeout: 5000 });
+        await page.waitForFunction(() => document.querySelector('chrome-urls-app')?.shadowRoot?.querySelector('cr-button'), { timeout: 5000, polling:100 });
         await page.evaluate(() => {
           const root = document.querySelector('chrome-urls-app')!.shadowRoot!;
           if (!root.querySelector('a[href="chrome://media-router-internals"]')) {
             (root.querySelector('cr-button') as HTMLElement).click();
           }
         });
-        await page.waitForFunction(() => document.querySelector('chrome-urls-app')?.shadowRoot?.querySelector('a[href="chrome://media-router-internals"]'), { timeout: 5000 });
+        await page.waitForFunction(() => document.querySelector('chrome-urls-app')?.shadowRoot?.querySelector('a[href="chrome://media-router-internals"]'), { timeout: 5000, polling:100 });
         await page.goto('chrome://media-router-internals/', { timeout: 5000 });
       }
       const state = await page.evaluate(async () => {
@@ -110,7 +131,7 @@ export class ChromiumCastTransport implements CastTransport {
           new Promise((_, reject) => setTimeout(() => reject(new Error('Cast-Prüfung: Zeitlimit')), 5000)),
         ]);
       });
-      return { ...(state as RouterState), known_sinks: this.sinks };
+      return { ...validateRouterState(state), known_sinks: [...this.sinks] };
     } catch (error) {
       throw new Error(`Übertragung kann nicht sicher gestartet werden: ${error instanceof Error ? error.message : String(error)}`);
     } finally {

@@ -42,3 +42,14 @@ Neu im Quellstand:
 
 - Sieben Auditbefunde korrigiert: sichere Audio-Sitzungszuordnung, tatsächliche Wiedergabestatus, wiederholbarer Stop, bestätigte Speicherung, dauerhaftes Browserprofil, erneute Initialisierung und frischer Lautstärkeabgleich.
 - Audit-Regressionsprüfung und produktiver MP3-Smoke-Test in die CI aufgenommen; Audit- und Umsetzungsbericht liegen den Paketen bei.
+
+Weitere Änderungen im Quellstand (noch nicht veröffentlicht):
+
+- „Verbindungsproblem beheben“ bietet passende nächste Schritte, einen kopierbaren Diagnosebericht und eine Wiederherstellung, die zuerst die eigene Sitzung beendet. Ein fehlgeschlagener Stop behält das Ziel.
+- Moduswahl und Fähigkeitsprüfung verwenden innerhalb eines Startversuchs ein gemeinsames, höchstens 1,5 Sekunden altes Diagnoseergebnis. Neue Empfängermeldungen verwerfen es; Identität und Belegung werden weiterhin vor dem Start geprüft. Geänderte Browserdiagnoseformate werden verständlich gemeldet.
+- Bereich und Favoritenfilter bleiben nach Neustarts erhalten. Bis zu drei zuletzt verwendete Empfänger sind direkt erreichbar; gesperrte Ziele bleiben gesperrt.
+- Versionsanzeige und Updateprüfung über GitHub beim normalen Start sowie auf Knopfdruck. Eine neue stabile Version erhält einen Downloadlink; Installation bleibt manuell. Demo und Smoke-Test prüfen nicht automatisch.
+- Exklusive Instanzsteuerung ersetzt die PID-Datei. Zweitstarts aktivieren das vorhandene Fenster über einen lokalen Anschluss; minimierte Fenster werden wiederhergestellt. Browser-/Rendererabbruch und Startfehler geben die Instanzsteuerung frei. Windows verwendet denselben Aktivierungsweg und versucht die Vordergrundberechtigung an Chrome zu übergeben.
+- Beschädigte Raum- und Filterdateien werden unverändert gesichert. Die Anwendung startet mit Standardwerten, zeigt die Sicherungspfade an und ergänzt sie im Diagnosebericht.
+- Auditkorrekturen: Discovery während einer Diagnose kann keinen veralteten Cache reaktivieren; ein Speicherfehler lässt den Aliasdialog offen und bleibt bei Filtern sichtbar. Fehlgeschlagene Diagnoseabrufe kopieren keinen alten Bericht; fehlgeschlagene Downloads schließen ihren Tab. Unzulässig große Versionsnummern werden abgelehnt. Details im aktuellen Abschnitt von `AUDIT.md`.
+- Oberfläche reduziert: Slogan und dauerhafte Bereitschaftshinweise entfernt, technische Gerätenamen in Tooltips und Umbenennen-Dialog verlagert, Hilfe und Versionsdetails eingeklappt. Sitzungsstatus erscheint bei Bedarf; verfügbare Updates bleiben sichtbar. Leere Suchergebnisse bieten „Filter zurücksetzen“. Audiotexte und Lautstärkefenster sind gekürzt.

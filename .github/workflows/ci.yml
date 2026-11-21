@@ -32,6 +32,7 @@ jobs:
       - run: npm test
       - run: /usr/bin/google-chrome --version
       - run: xvfb-run -a npm run test:ui
+      - run: xvfb-run -a npm run test:startup
       - run: xvfb-run -a npm run test:audit
       - name: Prepare virtual audio output
         timeout-minutes: 4
@@ -79,6 +80,9 @@ jobs:
       - name: Check Windows app window and packaged UI
         if: runner.os == 'Windows'
         run: npm run test:package -- --installer --browser
+      - name: Check Windows recovery and second launch
+        if: runner.os == 'Windows'
+        run: npm run test:startup
 
   publish:
     if: github.event_name == 'workflow_dispatch' && inputs.publish && github.ref == 'refs/heads/main'

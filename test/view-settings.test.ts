@@ -1,0 +1,40 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, rm, writeFile, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { ViewSettingsStore } from '../src/view-settings.js';
+
+test('Filter bleiben bei Neustart erhalten; schnelle Änderungen werden in Reihenfolge gespeichert', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'raumcast-settings-'));
+  t.after(() => rm(dir, { recursive:true, force:true }));
+  const filename = join(dir, 'view-settings.json');
+  const store = new ViewSettingsStore(filename);
+  await store.load();
+  assert.deepEqual(store.value, { favoritesOnly:false, prefix:'*' });
+  await Promise.all([store.update({ favoritesOnly:true, prefix:'A' }), store.update({ favoritesOnly:false, prefix:'G' })]);
+  const reopened = new ViewSettingsStore(filename); await reopened.load();
+  assert.deepEqual(reopened.value, { favoritesOnly:false, prefix:'G' });
+  await assert.rejects(store.update({ favoritesOnly:'yes', prefix:'G' }));
+  assert.deepEqual(JSON.parse(await readFile(filename, 'utf8')), reopened.value);
+  await writeFile(filename, '{broken');
+  const damaged = new ViewSettingsStore(filename); await damaged.load();
+  assert.deepEqual(damaged.value, { favoritesOnly:false, prefix:'*' });
+  assert.equal(await readFile(damaged.recovery!.backup, 'utf8'), '{broken');
+  await damaged.update({ favoritesOnly:true, prefix:'A' });
+  assert.equal(await readFile(damaged.recovery!.backup, 'utf8'), '{broken');
+});
+test('Fehlgeschlagenes Speichern behält bestätigte Filter und ist wiederholbar', async t => {
+  const dir = await mkdtemp(join(tmpdir(), 'raumcast-settings-'));
+  t.after(() => rm(dir, { recursive:true, force:true }));
+  const parent = join(dir, 'blocked');
+  await writeFile(parent, 'file');
+  const store = new ViewSettingsStore(join(parent, 'settings.json'));
+  await assert.rejects(store.update({ favoritesOnly:true, prefix:'A' }));
+  assert.deepEqual(store.value, { favoritesOnly:false, prefix:'*' });
+  await assert.rejects(store.flush());
+  await rm(parent);
+  await store.update({ favoritesOnly:true, prefix:'A' });
+  await store.flush();
+  assert.deepEqual(store.value, { favoritesOnly:true, prefix:'A' });
+});

@@ -35,6 +35,7 @@ export class CastController extends EventEmitter {
   mode: 'desktop' | 'audio' = 'desktop';
   busy = false;
   issue = '';
+  lastDiscoveryAt: number | null = null;
   private pendingTimer?: ReturnType<typeof setTimeout>;
   private ownedId: string | null = null;
   private observedActive = false;
@@ -45,6 +46,7 @@ export class CastController extends EventEmitter {
     transport.on('Cast.sinksUpdated', ({ sinks }: { sinks: Sink[] }) => {
       if (this.disposed) return;
       this.sinks = sinks;
+      this.lastDiscoveryAt = Date.now();
       if (!this.owned || this.phase === 'stopping') return;
       const matches = sinks.filter(s => s.name === this.owned);
       const sink = matches.length === 1 && matches[0].id === this.ownedId ? matches[0] : undefined;
@@ -204,9 +206,17 @@ export class CastController extends EventEmitter {
     try {
       await this.transport.send('Cast.disable');
       this.sinks = [];
+      this.lastDiscoveryAt = null;
       await this.initialize();
       this.issue = '';
     } finally { this.busy = false; }
+  }
+  async recover() {
+    if (this.disposed) throw new Error('Raumcast wurde beendet.');
+    if (this.busy) throw new Error('Bitte zuerst den Bildschirmdialog bestätigen oder abbrechen.');
+    // Do not reset discovery or lose the owned target if stopping fails.
+    if (this.owned) await this.stop();
+    await this.refresh();
   }
   async preference(name: string, patch: { favorite?: boolean; alias?: string }) {
     if (!this.snapshot().rooms.some(r => r.name === name)) throw new Error('Unbekannter Raum.');

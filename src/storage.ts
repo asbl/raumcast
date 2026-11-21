@@ -1,6 +1,7 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
+import { loadSettings, type SettingsRecovery } from './recover-settings.js';
 
 export type RoomPreference = { alias: string; favorite: boolean; lastUsed: number };
 export type Preferences = Record<string, RoomPreference>;
@@ -14,23 +15,25 @@ export function dataDirectory(): string {
 
 export class PreferenceStore {
   value: Preferences = Object.create(null);
+  recovery?: SettingsRecovery;
   private writes: Promise<void> = Promise.resolve();
   private writeError?: unknown;
   constructor(readonly filename: string) {}
   async load() {
-    try {
-      const parsed: unknown = JSON.parse(await readFile(this.filename, 'utf8'));
+    const loaded = await loadSettings(this.filename, parsed => {
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('Ungültige Raumdaten');
+      const value: Preferences = Object.create(null);
       for (const [name, item] of Object.entries(parsed)) {
         const p = item as RoomPreference;
         if (!p || typeof p.alias !== 'string' || typeof p.favorite !== 'boolean' || !Number.isFinite(p.lastUsed)) {
           throw new Error('Ungültige Raumdaten');
         }
-        this.value[name] = { alias: p.alias, favorite: p.favorite, lastUsed: p.lastUsed };
+        value[name] = { alias: p.alias, favorite: p.favorite, lastUsed: p.lastUsed };
       }
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-    }
+      return value;
+    }, () => Object.create(null) as Preferences);
+    this.value = loaded.value;
+    this.recovery = loaded.recovery;
   }
   async update(name: string, patch: Partial<RoomPreference>) {
     const task = this.writes.then(async () => {
