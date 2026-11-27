@@ -12,6 +12,7 @@ import { sameLocalFile } from './local-ui.js';
 import { ViewSettingsStore } from './view-settings.js';
 import { UpdateChecker, releasesUrl } from './updates.js';
 import { AppInstance } from './instance.js';
+import { NetworkMonitor } from './network.js';
 
 const demo = process.argv.includes('--demo');
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -76,6 +77,9 @@ async function launchApplication() {
   let recoveryAcknowledged = false;
   const version = (JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')) as { version:string }).version;
   const updates = new UpdateChecker(version);
+  const network = new NetworkMonitor();
+  // Demo und --smoke bleiben ohne Anfragen ins Internet.
+  const checkNetwork = !demo && !process.argv.includes('--smoke');
   const url = pathToFileURL(join(root, 'ui', 'index.html')).href;
   const graphicsArgs = browserGraphicsArgs();
   log(`Plattform: ${process.platform}; Grafik: ${graphicsArgs.length ? 'Software (--disable-gpu)' : 'Browserstandard'}`);
@@ -130,7 +134,8 @@ async function launchApplication() {
       if (!sameLocalFile(page.url(), url)) throw new Error('Unzulässiger Seitenaufruf.');
       const p = payload as { name?: string; alias?: string; favorite?: boolean; mode?: unknown } | undefined;
       if (closing) throw new Error('Raumcast wird beendet.');
-      if (action === 'snapshot') return { ok: true, data: { ...cast.snapshot(), demo, systemAudioSupported: demo || process.platform === 'linux', initializing, initializationError, version, viewSettings:settings.value, update:updates.status, recoveries:recoveryAcknowledged ? [] : recoveries } };
+      if (action === 'snapshot' && checkNetwork) network.refreshIfStale();
+      if (action === 'snapshot') return { ok: true, data: { ...cast.snapshot(), network:network.state, demo, systemAudioSupported: demo || process.platform === 'linux', initializing, initializationError, version, viewSettings:settings.value, update:updates.status, recoveries:recoveryAcknowledged ? [] : recoveries } };
       if (action === 'diagnostics') {
         const state = cast.snapshot();
         return { ok:true, data:[
@@ -143,6 +148,7 @@ async function launchApplication() {
           `Empfänger: ${state.rooms.filter(room => room.available).length} verfügbar; ${state.rooms.filter(room => room.ambiguous).length} mehrdeutig; ${state.rooms.filter(room => room.session).length} mit Sitzung`,
           `Letzte Empfängermeldung: ${cast.lastDiscoveryAt ? new Date(cast.lastDiscoveryAt).toISOString() : 'noch keine'}`,
           `Fehler: ${initializationError || state.issue || 'keiner'}`,
+          `Netzwerk: ${network.state}`,
           `Updateprüfung: ${updates.status.state}${updates.status.latest ? '; neueste Version ' + updates.status.latest : ''}`,
           `Programmordner: ${root}`, `Protokoll: ${logPath}`,
           ...recoveries.map(recovery => recovery.message),
@@ -162,6 +168,7 @@ async function launchApplication() {
         if (initializing) throw new Error('Cast wird noch initialisiert.');
         if (cast.busy || (action === 'refresh' && cast.owned)) throw new Error('Bitte zuerst die laufende Übertragung beenden.');
         initializing = true;
+        if (checkNetwork) void network.check();
         try {
           if (action === 'recover') await cast.recover();
           else if (initializationError) await cast.initialize(); else await cast.refresh();

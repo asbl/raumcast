@@ -42,5 +42,6 @@ dialog { border:1px solid var(--border); border-radius:14px; background:var(--ca
 #diagnostics { width:100%; resize:vertical; background:var(--bg); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:8px; font:11px monospace; }
 #recent { margin:0 0 20px; } #recent h2 { font-size:13px; margin-bottom:8px; } #recent-rooms { display:flex; flex-wrap:wrap; gap:6px; } #recent button { font-size:12px; }
 .updates { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:10px; } .updates button,#update-notice { font-size:12px; padding:5px 8px; } #update-status { overflow-wrap:anywhere; }
+#network-warning { padding:14px; margin-bottom:18px; border:1px solid #c79322; border-radius:10px; font-size:13px; line-height:1.5; } #network-warning p { margin:6px 0 0; }
 #settings-warning { padding:14px; margin-bottom:18px; border:1px solid #c79322; border-radius:10px; font-size:13px; line-height:1.5; overflow-wrap:anywhere; } #settings-recovery { white-space:pre-line; }
 #rename-error { color:var(--error); font-size:13px; overflow-wrap:anywhere; }
