@@ -70,6 +70,8 @@ Im Normalzustand stehen Suche, Filter und Raumliste im Vordergrund. Der Sitzungs
 
 ### Verbindungsprobleme und Updates
 
+Ist der Rechner in einem Netzwerk, hat aber keine Internetverbindung, zeigt Raumcast eine Warnung. Leitet das Netz auf eine Anmeldeseite um, weist sie auf die nötige Web-Anmeldung hin. Melde dich dann im normalen Browser an; die Warnung verschwindet nach wenigen Sekunden. Raumauswahl und Übertragung werden nicht gesperrt. Zur Prüfung ruft Raumcast `http://connectivitycheck.gstatic.com/generate_204` (Google) auf, bei bestehender Verbindung etwa alle 30 Sekunden, ohne Raum- oder Diagnosedaten. Die Anfrage nutzt keinen Systemproxy; in reinen Proxy-Netzen kann die Warnung daher fälschlich erscheinen. Demo und `--smoke` prüfen nicht.
+
 Unter „Hilfe“ unterhalb der Raumliste stehen zum aktuellen Zustand passende nächste Schritte und ein kopierbarer Diagnosebericht. Er enthält App-, Node- und Browserversion, Grafikmodus, Sitzungsstatus, Empfängerzahlen, Zeitpunkt der letzten Empfängermeldung, den letzten Verbindungsfehler sowie Programm- und Protokollpfad. Der Bericht wird lokal erstellt; du entscheidest, ob du ihn weitergibst. Falls direktes Kopieren nicht möglich ist, bleibt der Text für Strg+C beziehungsweise ⌘C markiert.
 
 „Verbindung neu initialisieren“ startet die Cast-Suche neu. Bei einer eigenen Sitzung heißt die Aktion „Übertragung beenden und neu suchen“ und beendet zuerst diese Sitzung. Schlägt das Beenden fehl, bleiben Ziel und Stop-Möglichkeit erhalten; die Suche wird dann nicht zurückgesetzt. Einen offenen Bildschirmdialog zuerst bestätigen oder abbrechen.

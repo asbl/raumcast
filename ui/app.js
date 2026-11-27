@@ -102,6 +102,17 @@ function renderUpdates() {
   $('download').hidden = update.state !== 'available';
   $('update-notice').hidden = update.state !== 'available';
 }
+const networkWarnings = {
+  login: ['Netzwerk verbunden, aber noch nicht angemeldet', 'Vermutlich ist eine Anmeldung im Web nötig. Bitte im normalen Browser anmelden.'],
+  offline: ['Netzwerk verbunden, aber keine Internetverbindung', 'Eventuell ist eine Anmeldung im Web nötig. Bitte im normalen Browser prüfen.'],
+};
+function renderNetwork() {
+  const warning = networkWarnings[snapshot.network];
+  $('network-warning').hidden = !warning;
+  // Nur bei Änderungen schreiben, damit die Warnung nicht ständig neu vorgelesen wird.
+  setText('network-title', warning?.[0] ?? '');
+  setText('network-hint', warning?.[1] ?? '');
+}
 function renderPrefixes(rooms) {
   const prefixes = [...new Set(rooms.map(room => room.prefix))];
   // Keep a selected area visible if its last receiver temporarily disappears.
@@ -124,7 +135,7 @@ function render() {
   const recoveries = snapshot.recoveries || [];
   $('settings-warning').hidden = recoveries.length === 0;
   setText('settings-recovery', recoveries.map(item => item.message).join('\n'));
-  renderHelp(); renderRecent(); renderUpdates();
+  renderHelp(); renderRecent(); renderUpdates(); renderNetwork();
   renderPrefixes(rooms);
   const target = rooms.find(r => r.name === owned);
   const label = target?.label || owned || '';
